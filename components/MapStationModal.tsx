@@ -125,7 +125,7 @@ export function MapStationModal({
           ) : mapStation && Platform.OS === 'ios' && AppleMapsView ? (
             <View style={styles.mapWebWrap}>
               <AppleMapsView style={styles.mapView} cameraPosition={mapCameraPosition} markers={mapMarkers} polylines={mapPolylines} />
-              {renderExternalButton('Open in Apple Maps')}
+              {renderExternalButton('Open directions')}
             </View>
           ) : mapStation && Platform.OS === 'android' && GoogleMapsView ? (
             <View style={styles.mapWebWrap}>

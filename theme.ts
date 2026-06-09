@@ -733,8 +733,8 @@ export function createThemedStyles(c: Palette) {
     },
     mapOpenExternalButton: {
       position: 'absolute',
-      left: 12,
-      top: 12,
+      left: 16,
+      top: 16,
       minWidth: 146,
       borderRadius: 999,
       overflow: 'hidden'
@@ -753,10 +753,12 @@ export function createThemedStyles(c: Palette) {
       alignItems: 'center'
     },
     mapOpenExternalButtonText: {
-      color: '#fff',
-      fontSize: 12,
-      fontWeight: '700',
-      textAlign: 'center'
+      color: '#007AFF',
+      fontSize: 18,
+      fontWeight: '600',
+      textAlign: 'center',
+      paddingVertical: 4,
+      paddingHorizontal: 12
     },
     mapOpenExternalButtonTextGlass: {
       color: c.primary

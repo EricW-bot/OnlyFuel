@@ -7,6 +7,7 @@ import {
   RefreshControl,
   TouchableOpacity,
   KeyboardAvoidingView,
+  ActionSheetIOS,
   Linking,
   Platform,
   type LayoutChangeEvent,
@@ -51,9 +52,11 @@ import { runTripAlgorithmValidation } from './tripValidation';
 import { getErrorMessage, normaliseBrands, normaliseFuelType, sameOrderedStringArray } from './helpers/utils';
 import {
   buildExternalMapUrl,
+  ExternalMapTripContext,
   getRoundTripStartMissingMessage,
   getTripAddressMissingMessage,
-  LIVE_DATA_TIMEOUT_MS
+  LIVE_DATA_TIMEOUT_MS,
+  openGoogleMapsForStation
 } from './helpers/appHelpers';
 import { getCurrentLocationWithTimeout } from './helpers/locationHelpers';
 import { fetchOneWayRouteGeometry, fetchRoundTripRouteGeometry } from './helpers/routeGeometryHelpers';
@@ -62,6 +65,7 @@ import { SettingsHeader } from './components/SettingsHeader';
 import { MapStationModal } from './components/MapStationModal';
 import { AddressSuggestionInput } from './components/AddressSuggestionInput';
 import { RoundedNumericInput } from './components/RoundedNumericInput';
+import { useFocusEffect } from 'expo-router';
 import { PricesTab } from './tabs/PricesTab';
 import { SettingsTab } from './tabs/SettingsTab';
 
@@ -129,6 +133,8 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     settings: 100
   });
   const [savedSettingsSnapshot, setSavedSettingsSnapshot] = useState<SettingsSnapshot | null>(null);
+  const handleSaveSettingsRef = useRef<() => Promise<void>>(async () => {});
+  const hasPendingSettingsChangesRef = useRef(false);
   const [appMode, setAppMode] = useState<AppMode>('roundTrip');
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
   const [rankedStations, setRankedStations] = useState<RankedStation[]>([]);
@@ -261,6 +267,9 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
 
   const navigateToTab = useCallback(
     (tab: AppTab) => {
+      if (activeTab === 'settings' && tab === 'prices' && hasPendingSettingsChangesRef.current) {
+        void handleSaveSettingsRef.current();
+      }
       // When using NativeTabs, routing remounts the correct screen.
       // Avoid changing internal `activeTab` to reduce redundant renders/flicker.
       if (!hideBottomNav) {
@@ -268,7 +277,7 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
       }
       onNavigateToTab?.(tab);
     },
-    [hideBottomNav, onNavigateToTab]
+    [activeTab, hideBottomNav, onNavigateToTab]
   );
   const bottomNavInset = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 6;
   const bottomNavHeight = 58 + bottomNavInset;
@@ -915,10 +924,6 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
           ? 'Destination address selected'
           : 'Select a destination suggestion';
 
-  const openExternalMapForStation = useCallback((station: RankedStation) => {
-    void Linking.openURL(buildExternalMapUrl(station));
-  }, []);
-
   const renderSettingsSection = useCallback(
     (children: React.ReactNode) => {
       return canUseLiquidGlass ? (
@@ -979,21 +984,6 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     return selectedStartAddress?.coordinates ?? null;
   }, [appMode, useCurrentLocation, userLocation, selectedStartAddress]);
 
-  const destinationMarker = useMemo<ExpoMapMarker | null>(() => {
-    if (appMode !== 'oneWay') {
-      return null;
-    }
-    return {
-      id: 'destination',
-      coordinates: {
-        latitude: tripDestination.latitude,
-        longitude: tripDestination.longitude
-      },
-      title: 'Destination',
-      snippet: tripDestinationAddress.trim() || 'Trip destination'
-    };
-  }, [appMode, tripDestination, tripDestinationAddress]);
-
   const roundTripStartPoint = useMemo<Coordinates | null>(() => {
     if (appMode !== 'roundTrip') {
       return null;
@@ -1009,6 +999,53 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     }
     return selectedStartAddress?.coordinates ?? null;
   }, [appMode, selectedStartAddress, useCurrentLocation, userLocation]);
+
+  const openExternalMapForStation = useCallback(
+    (station: RankedStation) => {
+      let tripContext: ExternalMapTripContext | undefined = undefined;
+
+      if (appMode === 'oneWay' && oneWayStartPoint) {
+        tripContext = { appMode, start: oneWayStartPoint, destination: tripDestination };
+      } else if (appMode === 'roundTrip' && roundTripStartPoint) {
+        tripContext = { appMode, start: roundTripStartPoint, destination: roundTripStartPoint };
+      }
+
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            options: ['Apple Maps', 'Google Maps', 'Cancel'],
+            cancelButtonIndex: 2,
+            title: 'Open directions'
+          },
+          (buttonIndex) => {
+            if (buttonIndex === 0) {
+              void Linking.openURL(buildExternalMapUrl(station, 'apple', Platform.OS, tripContext));
+            } else if (buttonIndex === 1) {
+              void openGoogleMapsForStation(station, tripContext);
+            }
+          }
+        );
+        return;
+      }
+      void Linking.openURL(buildExternalMapUrl(station, undefined, Platform.OS, tripContext));
+    },
+    [appMode, oneWayStartPoint, roundTripStartPoint, tripDestination]
+  );
+
+  const destinationMarker = useMemo<ExpoMapMarker | null>(() => {
+    if (appMode !== 'oneWay') {
+      return null;
+    }
+    return {
+      id: 'destination',
+      coordinates: {
+        latitude: tripDestination.latitude,
+        longitude: tripDestination.longitude
+      },
+      title: 'Destination',
+      snippet: tripDestinationAddress.trim() || 'Trip destination'
+    };
+  }, [appMode, tripDestination, tripDestinationAddress]);
 
   const roundTripStartMarker = useMemo<ExpoMapMarker | null>(() => {
     if (!roundTripStartPoint) {
@@ -1252,6 +1289,22 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
   const hasPendingSettingsChanges = useMemo(
     () => hasSettingsSnapshotChanges(savedSettingsSnapshot, currentSettingsSnapshot),
     [savedSettingsSnapshot, currentSettingsSnapshot]
+  );
+
+  handleSaveSettingsRef.current = handleSaveSettings;
+  hasPendingSettingsChangesRef.current = hasPendingSettingsChanges;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (activeTab !== 'settings') {
+        return;
+      }
+      return () => {
+        if (hasPendingSettingsChangesRef.current) {
+          void handleSaveSettingsRef.current();
+        }
+      };
+    }, [activeTab])
   );
 
   return (
@@ -1582,15 +1635,7 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
               </>
             ) : (
               <>
-                <SettingsHeader
-                  hasPendingSettingsChanges={hasPendingSettingsChanges}
-                  isSavingSettings={isSavingSettings}
-                  themeMode={themeMode}
-                  styles={styles}
-                  onSave={() => {
-                    void handleSaveSettings();
-                  }}
-                />
+                <SettingsHeader styles={styles} />
               </>
             )}
           </View>

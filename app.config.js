@@ -47,7 +47,8 @@ module.exports = () => {
       supportsTablet: true,
       bundleIdentifier: 'com.pickradmin.bowsr',
       infoPlist: {
-        ITSAppUsesNonExemptEncryption: false
+        ITSAppUsesNonExemptEncryption: false,
+        LSApplicationQueriesSchemes: ['comgooglemaps']
       }
     },
     web: {

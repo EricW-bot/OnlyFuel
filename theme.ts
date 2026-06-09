@@ -755,10 +755,8 @@ export function createThemedStyles(c: Palette) {
     mapOpenExternalButtonText: {
       color: '#007AFF',
       fontSize: 18,
-      fontWeight: '600',
-      textAlign: 'center',
-      paddingVertical: 4,
-      paddingHorizontal: 12
+      fontWeight: '500',
+      textAlign: 'center'
     },
     mapOpenExternalButtonTextGlass: {
       color: c.primary

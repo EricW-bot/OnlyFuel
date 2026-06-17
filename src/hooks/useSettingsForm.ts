@@ -15,7 +15,7 @@ import { getRoundTripStartMissingMessage, getTripAddressMissingMessage } from '@
 import { roundToTwoDecimalPlaces } from '@/lib/numberFormatting';
 import { useAddressPicker } from '@/hooks/useAddressPicker';
 import { createSettingsSnapshot, hasSettingsSnapshotChanges } from '@/lib/settingsSnapshot';
-import { publishSaveOutcome, type SaveOutcome } from '@/state/settingsSync';
+import { publishSaveOutcome, type SaveResult } from '@/state/settingsSync';
 import type { useLocation } from '@/hooks/useLocation';
 import type { useFuelData } from '@/hooks/useFuelData';
 
@@ -68,7 +68,7 @@ export function useSettingsForm({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const isSelectingSuggestionRef = useRef(false);
-  const handleSaveSettingsRef = useRef<() => Promise<SaveOutcome>>(async () => 'nothing');
+  const handleSaveSettingsRef = useRef<() => Promise<SaveResult>>(async () => ({ outcome: 'nothing' }));
   const hasPendingSettingsChangesRef = useRef(false);
 
   const isSettingsTabActive = activeTab === 'settings';
@@ -210,9 +210,9 @@ export function useSettingsForm({
     );
   }, []);
 
-  const handleSaveSettings = async (): Promise<SaveOutcome> => {
+  const handleSaveSettings = async (): Promise<SaveResult> => {
     if (!hasPendingSettingsChanges || isSavingSettings) {
-      return 'nothing';
+      return { outcome: 'nothing' };
     }
     setIsSavingSettings(true);
 
@@ -233,10 +233,13 @@ export function useSettingsForm({
         ? getTripAddressMissingMessage(startAddress, destinationAddress, useCurrentLocation)
         : getRoundTripStartMissingMessage(startAddress, useCurrentLocation);
     if (missingMessage) {
+      const missing: string[] = [];
+      if (!useCurrentLocation && startAddress.length === 0) missing.push('start address');
+      if (appMode === 'oneWay' && destinationAddress.length === 0) missing.push('destination address');
       setErrorMsg(missingMessage);
       setLoading(false);
       setIsSavingSettings(false);
-      return 'failed';
+      return { outcome: 'failed', reason: `missing ${missing.join(' and ')}` };
     }
     setErrorMsg(null);
     setLoading(true);
@@ -248,7 +251,7 @@ export function useSettingsForm({
         setErrorMsg('Location permission is required when "Use my location" is enabled.');
         setLoading(false);
         setIsSavingSettings(false);
-        return 'failed';
+        return { outcome: 'failed', reason: 'location permission denied' };
       }
       resolvedUserLocation = res.location;
     }
@@ -295,7 +298,7 @@ export function useSettingsForm({
           setErrorMsg('Please click a Start Address suggestion, then pick a valid result.');
           setLoading(false);
           setIsSavingSettings(false);
-          return 'failed';
+          return { outcome: 'failed', reason: 'start address not selected' };
         }
         setSelectedStartAddress(resolvedStart);
         nextTripStart = resolvedStart.coordinates;
@@ -311,7 +314,7 @@ export function useSettingsForm({
           setErrorMsg('Please click a Destination Address suggestion, then pick a valid result.');
           setLoading(false);
           setIsSavingSettings(false);
-          return 'failed';
+          return { outcome: 'failed', reason: 'destination address not selected' };
         }
         setSelectedDestinationAddress(resolvedDestination);
         nextTripDestination = resolvedDestination.coordinates;
@@ -347,7 +350,7 @@ export function useSettingsForm({
       setErrorMsg(getErrorMessage(err, 'Address validation failed. Please try again.'));
       setLoading(false);
       setIsSavingSettings(false);
-      return 'failed';
+      return { outcome: 'failed', reason: 'address lookup failed' };
     }
     setIsStartInputFocused(false);
     setIsDestinationInputFocused(false);
@@ -374,7 +377,7 @@ export function useSettingsForm({
       );
     }
     setIsSavingSettings(false);
-    return 'saved';
+    return { outcome: 'saved' };
   };
 
   handleSaveSettingsRef.current = handleSaveSettings;
@@ -386,7 +389,7 @@ export function useSettingsForm({
     if (hasPendingSettingsChangesRef.current) {
       void handleSaveSettingsRef.current().then(publishSaveOutcome);
     } else {
-      publishSaveOutcome('nothing');
+      publishSaveOutcome({ outcome: 'nothing' });
     }
   }, []);
 

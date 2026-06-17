@@ -28,7 +28,12 @@ export function useSaveToast(activeTab: AppTab): { toast: ToastState; toastVisib
       return;
     }
     lastToastIdRef.current = saveToast.id;
-    setToast(SAVE_TOAST_CONFIG[saveToast.outcome]);
+    const config = SAVE_TOAST_CONFIG[saveToast.outcome];
+    const message =
+      saveToast.outcome === 'failed' && saveToast.reason
+        ? `Failed to save — ${saveToast.reason}`
+        : config.message;
+    setToast({ message, variant: config.variant });
     setToastVisible(true);
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);

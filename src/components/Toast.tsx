@@ -47,7 +47,11 @@ export function Toast({ message, variant, visible, top, themeMode }: ToastProps)
   }, [visible, opacity, translateY]);
 
   const accent = VARIANT_ACCENT[variant];
-  const fallbackBg = themeMode === 'dark' ? 'rgba(26, 34, 45, 0.96)' : 'rgba(255, 255, 255, 0.96)';
+  // Fully opaque so the toast always reads over the cards behind it
+  // (it renders directly over the first list item).
+  const solidBg = themeMode === 'dark' ? 'rgb(26, 34, 45)' : 'rgb(255, 255, 255)';
+  const glassTint = themeMode === 'dark' ? 'rgb(17, 24, 39)' : 'rgb(255, 255, 255)';
+  const hairline = themeMode === 'dark' ? 'rgba(255, 255, 255, 0.14)' : 'rgba(15, 23, 42, 0.08)';
   const textColor = themeMode === 'dark' ? '#f8fafc' : '#0f172a';
 
   return (
@@ -57,12 +61,16 @@ export function Toast({ message, variant, visible, top, themeMode }: ToastProps)
     >
       <ThemedGlassView
         glassEffectStyle="regular"
-        style={styles.pill}
-        fallbackStyle={[styles.pill, styles.pillFallback, { backgroundColor: fallbackBg }]}
+        tintColor={glassTint}
+        style={[styles.pill, { borderColor: hairline }]}
+        fallbackStyle={[styles.pill, styles.pillFallback, { backgroundColor: solidBg, borderColor: hairline }]}
       >
+        {/* The liquid glass tint never reaches full opacity on-device, so back the
+            content with a solid fill to guarantee the toast is opaque. */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: solidBg }]} />
         <View style={styles.content}>
           <Ionicons name={VARIANT_ICON[variant]} size={20} color={accent} />
-          <Text style={[styles.message, { color: textColor }]} numberOfLines={1}>
+          <Text style={[styles.message, { color: textColor }]} numberOfLines={2}>
             {message}
           </Text>
         </View>
@@ -80,8 +88,10 @@ const styles = StyleSheet.create({
     zIndex: 1000
   },
   pill: {
-    borderRadius: 999,
-    overflow: 'hidden'
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    maxWidth: '88%'
   },
   pillFallback: {
     shadowColor: '#000',
@@ -98,6 +108,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10
   },
   message: {
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '600'
   }

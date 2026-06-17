@@ -20,7 +20,9 @@ export function bumpSettingsVersion() {
 // Outcome of attempting to persist settings when leaving the Settings tab.
 // Used to surface a toast on the Prices tab after the transition.
 export type SaveOutcome = 'saved' | 'failed' | 'nothing';
-export type SaveToast = { id: number; outcome: SaveOutcome };
+// A failed save can carry a succinct reason (e.g. "missing start address").
+export type SaveResult = { outcome: SaveOutcome; reason?: string };
+export type SaveToast = { id: number; outcome: SaveOutcome; reason?: string };
 
 let saveToast: SaveToast | null = null;
 let toastSeq = 0;
@@ -37,8 +39,9 @@ export function subscribeSaveToast(listener: () => void) {
   };
 }
 
-export function publishSaveOutcome(outcome: SaveOutcome) {
+export function publishSaveOutcome(result: SaveOutcome | SaveResult) {
+  const { outcome, reason } = typeof result === 'string' ? { outcome: result, reason: undefined } : result;
   toastSeq += 1;
-  saveToast = { id: toastSeq, outcome };
+  saveToast = { id: toastSeq, outcome, reason };
   toastListeners.forEach((listener) => listener());
 }

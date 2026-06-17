@@ -11,6 +11,7 @@ interface ThemedGlassViewProps {
   style?: StyleProp<ViewStyle>;
   glassEffectStyle?: any;
   fallbackStyle?: StyleProp<ViewStyle>;
+  tintColor?: string;
 }
 
 export function ThemedGlassView({
@@ -18,10 +19,11 @@ export function ThemedGlassView({
   style,
   glassEffectStyle = 'systemMaterial',
   fallbackStyle,
+  tintColor,
 }: ThemedGlassViewProps) {
   if (canUseLiquidGlass) {
     return (
-      <GlassView glassEffectStyle={glassEffectStyle} style={style}>
+      <GlassView glassEffectStyle={glassEffectStyle} tintColor={tintColor} style={style}>
         {children}
       </GlassView>
     );

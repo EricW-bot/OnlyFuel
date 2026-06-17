@@ -94,15 +94,20 @@ Other scripts from [`package.json`](package.json):
 
 ## Project layout (high level)
 
+All source lives under [`src/`](src), imported via the `@/*` alias (e.g. `@/lib/utils`).
+
 | Path | Role |
 |------|------|
-| [`App.tsx`](App.tsx) | UI, location, settings, orchestration |
-| [`Interface.ts`](Interface.ts) | Shared TypeScript types |
-| [`constants.ts`](constants.ts) | Tunables and public env-backed API settings |
-| [`fuelApiClient.ts`](fuelApiClient.ts) | OAuth + nearby fuel API + response normalization |
-| [`routingClient.ts`](routingClient.ts) | OSRM driving distance/time fallback |
-| [`calculations.ts`](calculations.ts) | Ranking and trip cost math |
-| [`utils.ts`](utils.ts) | Small helpers (normalization, errors) |
+| [`src/app/`](src/app) | Expo Router routes (Prices / Settings native tabs) |
+| [`src/App.tsx`](src/App.tsx) | Screen orchestrator: wires hooks + renders the active screen |
+| [`src/components/`](src/components) | Presentational UI, incl. [`screens/`](src/components/screens) (PricesScreen, SettingsScreen) |
+| [`src/hooks/`](src/hooks) | Stateful concerns: `useFuelData`, `useSettingsForm`, `useMapPreview`, `useSaveToast`, … |
+| [`src/services/`](src/services) | I/O: fuel API, geocoding, routing, network, preferences |
+| [`src/lib/`](src/lib) | Pure logic/helpers: ranking math, trip validation, utils, formatting |
+| [`src/state/`](src/state) | Cross-screen store (`settingsSync`) |
+| [`src/theme/`](src/theme) | Palette + themed styles |
+| [`src/types/`](src/types) | Shared TypeScript types |
+| [`src/constants.ts`](src/constants.ts) | Tunables and public env-backed API settings |
 
 ## License
 

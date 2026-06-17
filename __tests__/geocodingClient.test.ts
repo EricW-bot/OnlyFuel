@@ -1,17 +1,17 @@
 /* eslint-disable import/first */
-jest.mock('../constants', () => ({
+jest.mock('@/constants', () => ({
   GOOGLE_MAPS_WEB_API_KEY: '',
   GOOGLE_MAPS_API_KEY: 'test-google-key',
   GOOGLE_MAPS_ANDROID_API_KEY: '',
   GOOGLE_MAPS_IOS_API_KEY: ''
 }));
 
-jest.mock('../clients/network', () => ({
+jest.mock('@/services/network', () => ({
   fetchWithTimeout: jest.fn()
 }));
 
-import { fetchWithTimeout } from '../clients/network';
-import { fetchAddressSuggestions, resolveAddressByPlaceId } from '../clients/geocodingClient';
+import { fetchWithTimeout } from '@/services/network';
+import { fetchAddressSuggestions, resolveAddressByPlaceId } from '@/services/geocodingClient';
 
 const mockedFetchWithTimeout = fetchWithTimeout as jest.MockedFunction<typeof fetchWithTimeout>;
 

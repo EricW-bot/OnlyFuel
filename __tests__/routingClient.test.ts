@@ -15,11 +15,11 @@ describe('routing client fallback behavior', () => {
     jest.doMock('react-native', () => ({
       Platform: { OS: 'web' }
     }));
-    jest.doMock('../constants', () => ({
+    jest.doMock('@/constants', () => ({
       AVG_CITY_SPEED_KMH: 50,
       OPENROUTESERVICE_API_KEY: 'ors-key'
     }));
-    jest.doMock('../clients/network', () => ({
+    jest.doMock('@/services/network', () => ({
       fetchWithTimeout
     }));
 
@@ -27,7 +27,7 @@ describe('routing client fallback behavior', () => {
       beginRoutingSession,
       fetchRouteDistanceDuration,
       getRoutingSessionSource
-    } = require('../routingClient') as typeof import('../routingClient');
+    } = require('@/services/routingClient') as typeof import('@/services/routingClient');
 
     beginRoutingSession();
     const route = await fetchRouteDistanceDuration(
@@ -60,15 +60,15 @@ describe('routing client fallback behavior', () => {
     jest.doMock('react-native', () => ({
       Platform: { OS: 'android' }
     }));
-    jest.doMock('../constants', () => ({
+    jest.doMock('@/constants', () => ({
       AVG_CITY_SPEED_KMH: 50,
       OPENROUTESERVICE_API_KEY: 'ors-key'
     }));
-    jest.doMock('../clients/network', () => ({
+    jest.doMock('@/services/network', () => ({
       fetchWithTimeout
     }));
 
-    const { fetchRouteDistanceDuration } = require('../routingClient') as typeof import('../routingClient');
+    const { fetchRouteDistanceDuration } = require('@/services/routingClient') as typeof import('@/services/routingClient');
     const route = await fetchRouteDistanceDuration(
       { latitude: -33.86, longitude: 151.2 },
       { latitude: -33.9, longitude: 151.25 }
@@ -78,7 +78,7 @@ describe('routing client fallback behavior', () => {
   });
 
   it('provides minimum clamp for known distance metrics', async () => {
-    const { routeMetricsFromKnownDistanceKm } = require('../routingClient') as typeof import('../routingClient');
+    const { routeMetricsFromKnownDistanceKm } = require('@/services/routingClient') as typeof import('@/services/routingClient');
     const metrics = routeMetricsFromKnownDistanceKm(0);
     expect(metrics.distanceKm).toBe(0.1);
     expect(metrics.durationMin).toBeGreaterThan(0);

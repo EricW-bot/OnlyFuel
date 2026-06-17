@@ -19,7 +19,7 @@ module.exports = () => {
     name: 'OnlyFuel',
     slug: 'FuelNearMe',
     scheme: 'fuelnearme',
-    version: '2.3.0',
+    version: '2.4.0',
     orientation: 'portrait',
     icon: './assets/logo.png',
     userInterfaceStyle: 'automatic',

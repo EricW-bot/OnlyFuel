@@ -1,4 +1,4 @@
-import { computeTripNetCostDollars, keepFeasibleRankedStations, sanitisePositiveNumber } from '../calculations';
+import { computeTripNetCostDollars, keepFeasibleRankedStations, sanitisePositiveNumber } from '@/lib/calculations';
 
 describe('calculations helpers', () => {
   it('sanitizes invalid or non-positive numbers to fallback', () => {
@@ -46,14 +46,14 @@ describe('computeTripRankedStations candidate staging', () => {
       durationMin: 130
     });
 
-    jest.doMock('../routingClient', () => ({
+    jest.doMock('@/services/routingClient', () => ({
       fetchRouteDistanceDuration,
       fetchRouteVia,
       planRouteDistanceDuration: jest.fn(),
       routeMetricsFromKnownDistanceKm: jest.fn()
     }));
 
-    const { computeTripRankedStations } = require('../calculations') as typeof import('../calculations');
+    const { computeTripRankedStations } = require('@/lib/calculations') as typeof import('@/lib/calculations');
     const stations = Array.from({ length: 12 }, (_, index) => ({
       code: `S${index + 1}`,
       name: `Station ${index + 1}`,

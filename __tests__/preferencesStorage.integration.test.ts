@@ -8,7 +8,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   })
 }));
 
-import { loadUserPreferences, saveUserPreferences } from '../preferencesStorage';
+import { loadUserPreferences, saveUserPreferences } from '@/services/preferencesStorage';
 
 describe('preferences storage integration', () => {
   beforeEach(() => {

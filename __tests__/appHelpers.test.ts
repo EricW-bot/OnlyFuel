@@ -5,8 +5,8 @@ import {
   buildWebOneWayMapEmbedUrl,
   getRoundTripStartMissingMessage,
   getTripAddressMissingMessage
-} from '../helpers/appHelpers';
-import type { RankedStation } from '../Interface';
+} from '@/lib/appHelpers';
+import type { RankedStation } from '@/types';
 
 describe('appHelpers', () => {
   it('reports missing one-way addresses correctly', () => {

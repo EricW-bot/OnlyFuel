@@ -24,17 +24,17 @@ describe('geocoding edge behavior', () => {
     jest.doMock('react-native', () => ({
       Platform: { OS: 'web' }
     }));
-    jest.doMock('../constants', () => ({
+    jest.doMock('@/constants', () => ({
       GOOGLE_MAPS_WEB_API_KEY: '',
       GOOGLE_MAPS_API_KEY: '',
       GOOGLE_MAPS_ANDROID_API_KEY: '',
       GOOGLE_MAPS_IOS_API_KEY: ''
     }));
-    jest.doMock('../clients/network', () => ({
+    jest.doMock('@/services/network', () => ({
       fetchWithTimeout
     }));
 
-    const { fetchAddressSuggestions } = require('../clients/geocodingClient') as typeof import('../clients/geocodingClient');
+    const { fetchAddressSuggestions } = require('@/services/geocodingClient') as typeof import('@/services/geocodingClient');
     const results = await fetchAddressSuggestions('No Key');
     expect(results).toHaveLength(1);
     expect(results[0].id).toContain('nominatim');
@@ -52,17 +52,17 @@ describe('geocoding edge behavior', () => {
     jest.doMock('react-native', () => ({
       Platform: { OS: 'web' }
     }));
-    jest.doMock('../constants', () => ({
+    jest.doMock('@/constants', () => ({
       GOOGLE_MAPS_WEB_API_KEY: 'web-key',
       GOOGLE_MAPS_API_KEY: '',
       GOOGLE_MAPS_ANDROID_API_KEY: '',
       GOOGLE_MAPS_IOS_API_KEY: ''
     }));
-    jest.doMock('../clients/network', () => ({
+    jest.doMock('@/services/network', () => ({
       fetchWithTimeout
     }));
 
-    const { fetchAddressSuggestions } = require('../clients/geocodingClient') as typeof import('../clients/geocodingClient');
+    const { fetchAddressSuggestions } = require('@/services/geocodingClient') as typeof import('@/services/geocodingClient');
     await expect(fetchAddressSuggestions('Broken Path')).rejects.toThrow('Google geocode rejected key: REQUEST_DENIED');
   });
 });

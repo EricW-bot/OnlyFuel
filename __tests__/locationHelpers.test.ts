@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { getCurrentLocationWithTimeout } from '../helpers/locationHelpers';
+import { getCurrentLocationWithTimeout } from '@/lib/locationHelpers';
 
 jest.mock('expo-location', () => ({
   Accuracy: {

@@ -74,8 +74,17 @@ module.exports = () => {
           locationWhenInUsePermission: iosLocationPurpose
         }
       ],
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            enableSceneSupport: true
+          }
+        }
+      ],
       'expo-font',
-      'expo-router'
+      'expo-router',
+      'expo-status-bar'
     ]
   };
 };

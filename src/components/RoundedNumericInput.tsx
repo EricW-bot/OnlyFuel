@@ -23,17 +23,27 @@ export function RoundedNumericInput({
 }: RoundedNumericInputProps) {
   const keyboardType = useMemo(() => {
     if (Platform.OS === 'ios') {
-      return keyboardTypeOverrideIOS ?? 'numbers-and-punctuation';
+      return keyboardTypeOverrideIOS ?? 'decimal-pad';
     }
     return 'numeric';
   }, [keyboardTypeOverrideIOS]);
+
+  const handleChangeText = (text: string) => {
+    const sanitised = text.replace(/[^0-9.]/g, '');
+    const firstDot = sanitised.indexOf('.');
+    const deduped =
+      firstDot === -1
+        ? sanitised
+        : sanitised.slice(0, firstDot + 1) + sanitised.slice(firstDot + 1).replace(/\./g, '');
+    onChangeText(deduped);
+  };
 
   return (
     <TextInput
       style={inputStyle}
       keyboardType={keyboardType as any}
       value={value}
-      onChangeText={onChangeText}
+      onChangeText={handleChangeText}
       onBlur={() => {
         const rounded = roundToTwoDecimalPlaces(value);
         if (rounded !== value) {

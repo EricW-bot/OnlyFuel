@@ -2,6 +2,19 @@ import { useCallback, useState } from 'react';
 import * as Location from 'expo-location';
 import { getCurrentLocationWithTimeout } from '@/lib/locationHelpers';
 
+// expo-location keeps one pending resolver per permission type natively, so a second
+// concurrent request overwrites the first and leaves its promise unresolved forever.
+// Both tabs mount an App instance at launch, so share a single in-flight request.
+let foregroundPermissionRequest: Promise<Location.LocationPermissionResponse> | null = null;
+const requestForegroundPermissionOnce = (): Promise<Location.LocationPermissionResponse> => {
+  if (!foregroundPermissionRequest) {
+    foregroundPermissionRequest = Location.requestForegroundPermissionsAsync().finally(() => {
+      foregroundPermissionRequest = null;
+    });
+  }
+  return foregroundPermissionRequest;
+};
+
 type RefreshLocationResult = {
   success: boolean;
   errorMsg?: string;
@@ -14,7 +27,9 @@ export function useLocation() {
   const fetchLocation = useCallback(async (requirePermission: boolean): Promise<RefreshLocationResult> => {
     try {
       if (requirePermission) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
+        console.log('[trace] requesting location permission'); // TRACE
+        const { status } = await requestForegroundPermissionOnce();
+        console.log('[trace] permission status', status); // TRACE
         if (status !== 'granted') {
           return {
             success: false,
@@ -22,7 +37,9 @@ export function useLocation() {
             location: null
           };
         }
+        console.log('[trace] getting position'); // TRACE
         const loc = await getCurrentLocationWithTimeout();
+        console.log('[trace] got position', loc.coords.latitude, loc.coords.longitude); // TRACE
         setUserLocation(loc);
         return { success: true, location: loc };
       } else {
@@ -38,6 +55,7 @@ export function useLocation() {
         return { success: true, location: null };
       }
     } catch (err) {
+      console.log('[trace] fetchLocation threw', err instanceof Error ? err.message : String(err)); // TRACE
       if (requirePermission) {
         return {
           success: false,

@@ -38,9 +38,12 @@ export function useFuelData() {
   const processAndRank = useCallback(
     async (data: FuelApiData, userLat: number, userLon: number, neededStr: string, economyStr: string): Promise<number> => {
       const requestId = ++latestRankingRequestIdRef.current;
+      console.log('[trace] rank start id=', requestId, 'stations=', data.stations.length, 'prices=', data.prices.length); // TRACE
       const topStations = await computeRankedStations(data, userLat, userLon, neededStr, economyStr);
+      console.log('[trace] rank done id=', requestId, 'latest=', latestRankingRequestIdRef.current, 'mounted=', isMountedRef.current, 'count=', topStations.length); // TRACE
 
       if (!isMountedRef.current || requestId !== latestRankingRequestIdRef.current) {
+        console.log('[trace] rank result DISCARDED (loading NOT cleared)'); // TRACE
         return -1;
       }
 
@@ -66,7 +69,9 @@ export function useFuelData() {
         const requestFuelType = normaliseFuelType(fuelTypeInput);
         const requestBrands = normaliseBrands(brandsInput);
 
+        console.log('[trace] token request'); // TRACE
         const accessToken = await getAccessToken();
+        console.log('[trace] token ok; nearby request'); // TRACE
 
         const selectedData = await fetchNearbyFuelData(
           accessToken,
@@ -77,6 +82,7 @@ export function useFuelData() {
           requestFuelType
         );
 
+        console.log('[trace] nearby ok', selectedData ? selectedData.stations.length : null); // TRACE
         if (!selectedData) {
           throw new Error('Nearby API returned no usable stations for the selected radius.');
         }
@@ -100,6 +106,7 @@ export function useFuelData() {
       } catch (err) {
         const liveError = getErrorMessage(err, 'Live data request failed.');
         console.warn(`Live data failed: ${liveError}`);
+        console.log('[trace] fetchAndRank caught error'); // TRACE
         setLoading(false);
         setErrorMsg('Could not refresh live fuel prices right now. Please try again in a moment.');
       }

@@ -207,11 +207,9 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
   // Initial load: hydrate the form from storage, resolve location, then rank.
   useEffect(() => {
     let cancelled = false;
-    console.log('[trace] init effect start'); // TRACE
     (async () => {
       try {
         const prefs = await loadUserPreferences();
-        console.log('[trace] prefs loaded', prefs.appMode, 'gps=', prefs.useCurrentLocation, 'cancelled=', cancelled); // TRACE
         if (cancelled) return;
 
         const fuelTypeNorm = normaliseFuelType(prefs.fuelType);
@@ -221,7 +219,6 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
         fuelData.setAppliedFuelType(fuelTypeNorm);
 
         const { success, errorMsg, location: newLoc } = await fetchLocation(prefs.useCurrentLocation);
-        console.log('[trace] location result success=', success, 'hasLoc=', !!newLoc, 'cancelled=', cancelled, errorMsg ?? ''); // TRACE
         if (cancelled) return;
         if (!success) {
           fuelData.setErrorMsg(errorMsg || 'Failed to get location');
@@ -272,7 +269,6 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
             }
             : prefs.tripStart;
 
-          console.log('[trace] roundTrip fetch start', roundTripStart.latitude, roundTripStart.longitude); // TRACE
           await fuelData.fetchAndRankFuelDataRef.current(
             roundTripStart.latitude,
             roundTripStart.longitude,
@@ -281,7 +277,6 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
             fuelTypeNorm,
             brandsNorm
           );
-          console.log('[trace] roundTrip fetch returned'); // TRACE
         }
       } catch (err) {
         if (!cancelled) {
@@ -291,7 +286,6 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
       }
     })();
     return () => {
-      console.log('[trace] init effect cleanup'); // TRACE
       cancelled = true;
     };
     // Mount-only: setters and fetch refs are stable; hydrate is memoized.

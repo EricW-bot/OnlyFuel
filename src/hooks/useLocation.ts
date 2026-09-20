@@ -27,9 +27,7 @@ export function useLocation() {
   const fetchLocation = useCallback(async (requirePermission: boolean): Promise<RefreshLocationResult> => {
     try {
       if (requirePermission) {
-        console.log('[trace] requesting location permission'); // TRACE
         const { status } = await requestForegroundPermissionOnce();
-        console.log('[trace] permission status', status); // TRACE
         if (status !== 'granted') {
           return {
             success: false,
@@ -37,9 +35,7 @@ export function useLocation() {
             location: null
           };
         }
-        console.log('[trace] getting position'); // TRACE
         const loc = await getCurrentLocationWithTimeout();
-        console.log('[trace] got position', loc.coords.latitude, loc.coords.longitude); // TRACE
         setUserLocation(loc);
         return { success: true, location: loc };
       } else {
@@ -55,7 +51,6 @@ export function useLocation() {
         return { success: true, location: null };
       }
     } catch (err) {
-      console.log('[trace] fetchLocation threw', err instanceof Error ? err.message : String(err)); // TRACE
       if (requirePermission) {
         return {
           success: false,

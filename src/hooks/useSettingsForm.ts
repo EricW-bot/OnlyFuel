@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { LocationObject } from 'expo-location';
 import { BRAND_OPTIONS, DEFAULT_FUEL_TYPE, DEFAULT_TRIP_DESTINATION } from '@/constants';
@@ -380,8 +380,10 @@ export function useSettingsForm({
     return { outcome: 'saved' };
   };
 
-  handleSaveSettingsRef.current = handleSaveSettings;
-  hasPendingSettingsChangesRef.current = hasPendingSettingsChanges;
+  useLayoutEffect(() => {
+    handleSaveSettingsRef.current = handleSaveSettings;
+    hasPendingSettingsChangesRef.current = hasPendingSettingsChanges;
+  });
 
   // Persist any pending settings changes when leaving the Settings tab and
   // publish the outcome so the Prices tab can surface a toast.

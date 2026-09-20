@@ -45,8 +45,8 @@ export function useMapPreview({
   isNativeMapPreviewAvailable,
   palette
 }: UseMapPreviewArgs) {
-  const [oneWayRouteGeometry, setOneWayRouteGeometry] = useState<Coordinates[] | null>(null);
-  const [roundTripRouteGeometry, setRoundTripRouteGeometry] = useState<Coordinates[] | null>(null);
+  const [oneWayRouteResult, setOneWayRouteResult] = useState<{ key: string; geometry: Coordinates[] | null } | null>(null);
+  const [roundTripRouteResult, setRoundTripRouteResult] = useState<{ key: string; geometry: Coordinates[] | null } | null>(null);
 
   const stationMarker = useMemo<ExpoMapMarker | null>(() => {
     if (!mapStation) {
@@ -181,61 +181,65 @@ export function useMapPreview({
     };
   }, [oneWayStartPoint, useCurrentLocation, tripStartAddress]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const stationPoint = mapStation
-      ? {
-        latitude: mapStation.location.latitude,
-        longitude: mapStation.location.longitude
-      }
+  // A fetched route is only shown while it matches the current inputs; otherwise
+  // callers fall back to the straight-line path.
+  const oneWayRouteKey =
+    appMode === 'oneWay' && oneWayStartPoint && mapStation && isNativeMapPreviewAvailable
+      ? `${oneWayStartPoint.latitude},${oneWayStartPoint.longitude}|${mapStation.location.latitude},${mapStation.location.longitude}|${tripDestination.latitude},${tripDestination.longitude}`
       : null;
+  const oneWayRouteGeometry =
+    oneWayRouteKey !== null && oneWayRouteResult?.key === oneWayRouteKey ? oneWayRouteResult.geometry : null;
 
-    if (appMode !== 'oneWay' || !oneWayStartPoint || !stationPoint || !isNativeMapPreviewAvailable) {
-      setOneWayRouteGeometry(null);
-      return () => {
-        cancelled = true;
-      };
+  useEffect(() => {
+    if (oneWayRouteKey === null || !oneWayStartPoint || !mapStation) {
+      return;
     }
+    let cancelled = false;
+    const stationPoint = {
+      latitude: mapStation.location.latitude,
+      longitude: mapStation.location.longitude
+    };
 
     void (async () => {
       const geometry = await fetchOneWayRouteGeometry(oneWayStartPoint, stationPoint, tripDestination);
       if (!cancelled) {
-        setOneWayRouteGeometry(geometry);
+        setOneWayRouteResult({ key: oneWayRouteKey, geometry });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [appMode, isNativeMapPreviewAvailable, mapStation, oneWayStartPoint, tripDestination]);
+  }, [oneWayRouteKey, mapStation, oneWayStartPoint, tripDestination]);
+
+  const roundTripRouteKey =
+    Platform.OS !== 'web' && appMode === 'roundTrip' && roundTripStartPoint && mapStation
+      ? `${roundTripStartPoint.latitude},${roundTripStartPoint.longitude}|${mapStation.location.latitude},${mapStation.location.longitude}`
+      : null;
+  const roundTripRouteGeometry =
+    roundTripRouteKey !== null && roundTripRouteResult?.key === roundTripRouteKey ? roundTripRouteResult.geometry : null;
 
   useEffect(() => {
-    let cancelled = false;
-    const stationPoint = mapStation
-      ? {
-        latitude: mapStation.location.latitude,
-        longitude: mapStation.location.longitude
-      }
-      : null;
-
-    if (Platform.OS === 'web' || appMode !== 'roundTrip' || !roundTripStartPoint || !stationPoint) {
-      setRoundTripRouteGeometry(null);
-      return () => {
-        cancelled = true;
-      };
+    if (roundTripRouteKey === null || !roundTripStartPoint || !mapStation) {
+      return;
     }
+    let cancelled = false;
+    const stationPoint = {
+      latitude: mapStation.location.latitude,
+      longitude: mapStation.location.longitude
+    };
 
     void (async () => {
       const geometry = await fetchRoundTripRouteGeometry(roundTripStartPoint, stationPoint);
       if (!cancelled) {
-        setRoundTripRouteGeometry(geometry);
+        setRoundTripRouteResult({ key: roundTripRouteKey, geometry });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [appMode, mapStation, roundTripStartPoint]);
+  }, [roundTripRouteKey, mapStation, roundTripStartPoint]);
 
   const mapMarkers = useMemo<ExpoMapMarker[]>(
     () =>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { computeRankedStations, computeTripRankedStations } from '@/lib/calculations';
 import { beginRoutingSession } from '@/services/routingClient';
 import { DEFAULT_FUEL_TYPE, NEARBY_RADIUS_KM, TRIP_SAMPLE_RADIUS_KM } from '@/constants';
@@ -245,9 +245,11 @@ export function useFuelData() {
   );
 
   const fetchAndRankFuelDataRef = useRef(fetchAndRankFuelData);
-  fetchAndRankFuelDataRef.current = fetchAndRankFuelData;
   const fetchAndRankTripDataRef = useRef(fetchAndRankTripData);
-  fetchAndRankTripDataRef.current = fetchAndRankTripData;
+  useLayoutEffect(() => {
+    fetchAndRankFuelDataRef.current = fetchAndRankFuelData;
+    fetchAndRankTripDataRef.current = fetchAndRankTripData;
+  }, [fetchAndRankFuelData, fetchAndRankTripData]);
 
   return {
     rankedStations,

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedGlassView } from '@/components/ThemedGlassView';
@@ -26,8 +26,8 @@ const VARIANT_ACCENT: Record<ToastVariant, string> = {
 };
 
 export function Toast({ message, variant, visible, top, themeMode }: ToastProps) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(-12)).current;
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [translateY] = useState(() => new Animated.Value(-12));
 
   useEffect(() => {
     Animated.parallel([

@@ -53,6 +53,8 @@ describe('computeTripRankedStations candidate staging', () => {
       routeMetricsFromKnownDistanceKm: jest.fn()
     }));
 
+    // Must be required after jest.doMock so the module picks up the mocked routing client.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { computeTripRankedStations } = require('@/lib/calculations') as typeof import('@/lib/calculations');
     const stations = Array.from({ length: 12 }, (_, index) => ({
       code: `S${index + 1}`,

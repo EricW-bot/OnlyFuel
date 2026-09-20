@@ -102,13 +102,9 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
 
   const bottomNavInset = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 6;
   const bottomNavHeight = 58 + bottomNavInset;
-  // In NativeTabs mode, use the system safe-area bottom inset directly.
-  // This prevents overscroll blank space while still leaving enough space
-  // for the native tab bar.
   const scrollBottomPadding = hideBottomNav ? insets.bottom : bottomNavHeight + 8;
   const statusBarInset = insets.top;
   const headerTopOffset = statusBarInset;
-  // Shaved off all remaining layout padding to force the solid line tightest to the top
   const topHeaderHeight = headerTopOffset + (headerContentHeights[activeTab] ?? 84);
 
   const bgRgbaSolid = themeMode === 'light' ? 'rgba(238, 242, 247, 1)' : 'rgba(15, 20, 25, 1)';
@@ -318,9 +314,9 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
         return;
       }
       return () => {
-        settings.flushSettingsOnLeave();
+        flushSettingsOnLeave();
       };
-    }, [activeTab, settings.flushSettingsOnLeave])
+    }, [activeTab, flushSettingsOnLeave])
   );
 
   const bottomNavTabs: TabDefinition[] = [

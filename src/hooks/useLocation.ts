@@ -50,7 +50,7 @@ export function useLocation() {
         }
         return { success: true, location: null };
       }
-    } catch (err) {
+    } catch {
       if (requirePermission) {
         return {
           success: false,

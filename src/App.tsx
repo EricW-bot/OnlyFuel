@@ -1,16 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, Text, TouchableOpacity, View, type LayoutChangeEvent, useColorScheme } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Platform, Text, TouchableOpacity, View, type LayoutChangeEvent, useColorScheme } from 'react-native';
 import { SafeAreaView, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { canUseLiquidGlass } from '@/components/ThemedGlassView';
 import { GlassView } from 'expo-glass-effect';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { AppTab, RankedStation, TabDefinition } from '@/types';
-import { loadUserPreferences } from '@/services/preferencesStorage';
+import type { AppTab, RankedStation, SettingsFocusRequest, SettingsSection, TabDefinition } from '@/types';
+import { loadUserPreferences, saveUserPreferences } from '@/services/preferencesStorage';
 import { createThemedStyles, getPalette } from '@/theme/theme';
+import { toUsableRangeParam, usableRangeKm } from '@/lib/range';
 import { runTripAlgorithmValidation } from '@/lib/tripValidation';
-import { getErrorMessage, normaliseBrands, normaliseFuelType } from '@/lib/utils';
-import { getRoundTripStartMissingMessage, getTripAddressMissingMessage } from '@/lib/appHelpers';
+import { getErrorMessage, normaliseBrands, normaliseFuelType, normaliseRangeKm } from '@/lib/utils';
+import { FOREGROUND_REFRESH_AFTER_MS, getRoundTripStartMissingMessage, getTripAddressMissingMessage } from '@/lib/appHelpers';
 import { FloatingBottomNav } from '@/components/FloatingBottomNav';
 import { SettingsHeader } from '@/components/SettingsHeader';
 import { MapStationModal } from '@/components/MapStationModal';
@@ -27,11 +28,19 @@ import { useSaveToast } from '@/hooks/useSaveToast';
 type AppProps = {
   initialTab?: AppTab;
   hideBottomNav?: boolean;
-  onNavigateToTab?: (tab: AppTab) => void;
+  onNavigateToTab?: (tab: AppTab, section?: SettingsSection) => void;
   onSettingsSaved?: () => void;
+  /** Opens and scrolls Settings to a section (used when Settings is its own route). */
+  settingsFocus?: SettingsFocusRequest | null;
 };
 
-export default function App({ initialTab = 'prices', hideBottomNav = false, onNavigateToTab, onSettingsSaved }: AppProps) {
+export default function App({
+  initialTab = 'prices',
+  hideBottomNav = false,
+  onNavigateToTab,
+  onSettingsSaved,
+  settingsFocus
+}: AppProps) {
   return (
     <SafeAreaProvider>
       <AppContent
@@ -39,12 +48,19 @@ export default function App({ initialTab = 'prices', hideBottomNav = false, onNa
         hideBottomNav={hideBottomNav}
         onNavigateToTab={onNavigateToTab}
         onSettingsSaved={onSettingsSaved}
+        settingsFocus={settingsFocus}
       />
     </SafeAreaProvider>
   );
 }
 
-function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateToTab, onSettingsSaved }: AppProps) {
+function AppContent({
+  initialTab = 'prices',
+  hideBottomNav = false,
+  onNavigateToTab,
+  onSettingsSaved,
+  settingsFocus
+}: AppProps) {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const themeMode = colorScheme === 'dark' ? 'dark' : 'light';
@@ -58,8 +74,14 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     prices: 100,
     settings: 100
   });
+  // With the in-app bottom nav there is no route param, so keep the request locally.
+  const [localSettingsFocus, setLocalSettingsFocus] = useState<SettingsFocusRequest | null>(null);
   const [mapStation, setMapStation] = useState<RankedStation | null>(null);
   const [expoMapsModule, setExpoMapsModule] = useState<typeof import('expo-maps') | null>(null);
+
+  // In NativeTabs mode the Settings route is its own App instance. It only edits preferences;
+  // the Prices route owns fetching, so this instance never loads prices.
+  const isSettingsOnlyInstance = hideBottomNav && initialTab === 'settings';
 
   const { userLocation, fetchLocation } = useLocation();
   const fuelData = useFuelData();
@@ -71,11 +93,12 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     setErrorMsg: fuelData.setErrorMsg,
     fetchAndRankFuelDataRef: fuelData.fetchAndRankFuelDataRef,
     fetchAndRankTripDataRef: fuelData.fetchAndRankTripDataRef,
-    onSettingsSaved
+    onSettingsSaved,
+    refreshAfterSave: !isSettingsOnlyInstance
   });
   // Stable across renders (useCallback in the hook); depend on this rather than
   // the `settings` object, whose identity changes every render.
-  const { flushSettingsOnLeave } = settings;
+  const { flushSettingsOnLeave, rehydrateFromStorage } = settings;
 
   const palette = useMemo(() => getPalette(themeMode), [themeMode]);
   const styles = useMemo(() => createThemedStyles(palette), [palette]);
@@ -111,67 +134,22 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
   const bgRgbaTransparent = themeMode === 'light' ? 'rgba(238, 242, 247, 0)' : 'rgba(15, 20, 25, 0)';
 
   const navigateToTab = useCallback(
-    (tab: AppTab) => {
+    (tab: AppTab, section?: SettingsSection) => {
       if (activeTab === 'settings' && tab === 'prices') {
         flushSettingsOnLeave();
+      }
+      if (!hideBottomNav) {
+        setLocalSettingsFocus(section ? { section, nonce: Date.now() } : null);
       }
       // When using NativeTabs, routing remounts the correct screen.
       // Avoid changing internal `activeTab` to reduce redundant renders/flicker.
       if (!hideBottomNav) {
         setActiveTabState(tab);
       }
-      onNavigateToTab?.(tab);
+      onNavigateToTab?.(tab, section);
     },
     [activeTab, hideBottomNav, onNavigateToTab, flushSettingsOnLeave]
   );
-
-  const handleListRefresh = useCallback(async () => {
-    fuelData.setRefreshing(true);
-    try {
-      let nextUserLocation = userLocation;
-      if (settings.useCurrentLocation) {
-        const res = await fetchLocation(false);
-        if (res.location) {
-          nextUserLocation = res.location;
-        }
-      }
-
-      let nextTripStart = {
-        latitude: nextUserLocation?.coords.latitude ?? 0,
-        longitude: nextUserLocation?.coords.longitude ?? 0
-      };
-
-      if (!settings.useCurrentLocation) {
-        if (!settings.selectedStartAddress?.coordinates) return;
-        nextTripStart = settings.selectedStartAddress.coordinates;
-      }
-
-      if (settings.appMode === 'oneWay') {
-        if (!settings.selectedDestinationAddress?.coordinates) return;
-        await fuelData.fetchAndRankTripDataRef.current(
-          nextTripStart,
-          settings.selectedDestinationAddress.coordinates,
-          settings.fuelNeeded,
-          settings.fuelEconomy,
-          fuelData.appliedFuelType,
-          settings.selectedBrands
-        );
-      } else {
-        await fuelData.fetchAndRankFuelDataRef.current(
-          nextTripStart.latitude,
-          nextTripStart.longitude,
-          settings.fuelNeeded,
-          settings.fuelEconomy,
-          fuelData.appliedFuelType,
-          settings.selectedBrands
-        );
-      }
-    } catch {
-      // Ignore errors on refresh
-    } finally {
-      fuelData.setRefreshing(false);
-    }
-  }, [userLocation, fetchLocation, fuelData, settings]);
 
   useEffect(() => {
     if (__DEV__) {
@@ -200,92 +178,169 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     };
   }, []);
 
-  // Initial load: hydrate the form from storage, resolve location, then rank.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const prefs = await loadUserPreferences();
-        if (cancelled) return;
+  // Loads preferences, resolves the location, then ranks. Used for the first load, retry,
+  // pull-to-refresh and returning to the foreground. A `silent` load keeps showing the current
+  // results (an error appears as a banner above them) instead of swapping in the spinner.
+  const loadIdRef = useRef(0);
+  const runLoad = async (silent: boolean, allowCache = false) => {
+    const loadId = ++loadIdRef.current;
+    const superseded = () => loadId !== loadIdRef.current;
+    try {
+      if (!silent) {
+        fuelData.setErrorMsg(null);
+        fuelData.setLoading(true);
+      }
+      const prefs = await loadUserPreferences();
+      if (superseded()) return;
 
-        const fuelTypeNorm = normaliseFuelType(prefs.fuelType);
-        const brandsNorm = normaliseBrands(prefs.selectedBrands);
+      const fuelTypeNorm = normaliseFuelType(prefs.fuelType);
+      const brandsNorm = normaliseBrands(prefs.selectedBrands);
+      const usableRange = toUsableRangeParam(prefs.remainingRangeKm, prefs.rangeMarginPct);
 
+      // Don't clobber edits the user is typing (single-instance mode) with the stored values.
+      if (!silent || !settings.hasPendingSettingsChanges) {
         settings.hydrate(prefs);
-        fuelData.setAppliedFuelType(fuelTypeNorm);
+      }
+      fuelData.setAppliedFuelType(fuelTypeNorm);
 
-        const { success, errorMsg, location: newLoc } = await fetchLocation(prefs.useCurrentLocation);
-        if (cancelled) return;
-        if (!success) {
-          fuelData.setErrorMsg(errorMsg || 'Failed to get location');
+      if (isSettingsOnlyInstance) {
+        fuelData.setLoading(false);
+        return;
+      }
+
+      const { success, errorMsg, permissionDenied, location: newLoc } = await fetchLocation(prefs.useCurrentLocation);
+      if (superseded()) return;
+      if (!success) {
+        fuelData.setErrorMsg(errorMsg || 'Failed to get location', permissionDenied ? 'permission' : 'general');
+        fuelData.setLoading(false);
+        return;
+      }
+      const location = newLoc;
+
+      if (prefs.appMode === 'oneWay') {
+        const missingMessage = getTripAddressMissingMessage(
+          prefs.tripStartAddress,
+          prefs.tripDestinationAddress,
+          prefs.useCurrentLocation
+        );
+        if (missingMessage) {
+          fuelData.setErrorMsg(missingMessage, 'needsSettings');
           fuelData.setLoading(false);
           return;
         }
-        const location = newLoc;
 
-        if (prefs.appMode === 'oneWay') {
-          const missingMessage = getTripAddressMissingMessage(
-            prefs.tripStartAddress,
-            prefs.tripDestinationAddress,
-            prefs.useCurrentLocation
-          );
-          if (missingMessage) {
-            fuelData.setErrorMsg(missingMessage);
-            fuelData.setLoading(false);
-            return;
+        const oneWayStart = prefs.useCurrentLocation
+          ? {
+            latitude: location?.coords.latitude ?? 0,
+            longitude: location?.coords.longitude ?? 0
           }
+          : prefs.tripStart;
 
-          const oneWayStart = prefs.useCurrentLocation
-            ? {
-              latitude: location?.coords.latitude ?? 0,
-              longitude: location?.coords.longitude ?? 0
-            }
-            : prefs.tripStart;
-
-          await fuelData.fetchAndRankTripDataRef.current(
-            oneWayStart,
-            prefs.tripDestination,
-            prefs.fuelNeeded,
-            prefs.fuelEconomy,
-            fuelTypeNorm,
-            brandsNorm
-          );
-        } else {
-          const missingMessage = getRoundTripStartMissingMessage(prefs.tripStartAddress, prefs.useCurrentLocation);
-          if (missingMessage) {
-            fuelData.setErrorMsg(missingMessage);
-            fuelData.setLoading(false);
-            return;
-          }
-
-          const roundTripStart = prefs.useCurrentLocation
-            ? {
-              latitude: location?.coords.latitude ?? 0,
-              longitude: location?.coords.longitude ?? 0
-            }
-            : prefs.tripStart;
-
-          await fuelData.fetchAndRankFuelDataRef.current(
-            roundTripStart.latitude,
-            roundTripStart.longitude,
-            prefs.fuelNeeded,
-            prefs.fuelEconomy,
-            fuelTypeNorm,
-            brandsNorm
-          );
-        }
-      } catch (err) {
-        if (!cancelled) {
-          fuelData.setErrorMsg(getErrorMessage(err, 'An error occurred while initializing.'));
+        await fuelData.fetchAndRankTripDataRef.current(
+          oneWayStart,
+          prefs.tripDestination,
+          prefs.fuelNeeded,
+          prefs.fuelEconomy,
+          fuelTypeNorm,
+          brandsNorm,
+          usableRange,
+          { allowCache }
+        );
+      } else {
+        const missingMessage = getRoundTripStartMissingMessage(prefs.tripStartAddress, prefs.useCurrentLocation);
+        if (missingMessage) {
+          fuelData.setErrorMsg(missingMessage, 'needsSettings');
           fuelData.setLoading(false);
+          return;
+        }
+
+        const roundTripStart = prefs.useCurrentLocation
+          ? {
+            latitude: location?.coords.latitude ?? 0,
+            longitude: location?.coords.longitude ?? 0
+          }
+          : prefs.tripStart;
+
+        await fuelData.fetchAndRankFuelDataRef.current(
+          roundTripStart.latitude,
+          roundTripStart.longitude,
+          prefs.fuelNeeded,
+          prefs.fuelEconomy,
+          fuelTypeNorm,
+          brandsNorm,
+          usableRange,
+          { allowCache }
+        );
+      }
+    } catch (err) {
+      if (!superseded()) {
+        fuelData.setErrorMsg(getErrorMessage(err, 'An error occurred while initializing.'));
+        fuelData.setLoading(false);
+      }
+    }
+  };
+
+  const refreshInPlace = async (allowCache = false) => {
+    fuelData.setRefreshing(true);
+    try {
+      await runLoad(true, allowCache);
+    } finally {
+      fuelData.setRefreshing(false);
+    }
+  };
+
+  // Stable handles to the latest closures, for effects and memoised callbacks.
+  const runLoadRef = useRef(runLoad);
+  const refreshInPlaceRef = useRef(refreshInPlace);
+  useLayoutEffect(() => {
+    runLoadRef.current = runLoad;
+    refreshInPlaceRef.current = refreshInPlace;
+  });
+
+  useEffect(() => {
+    void runLoadRef.current(false);
+    const activeLoadIdRef = loadIdRef;
+    return () => {
+      // Supersede any load still in flight when this instance unmounts.
+      activeLoadIdRef.current += 1;
+    };
+  }, []);
+
+  const locationBlockedRef = useRef(false);
+  locationBlockedRef.current = fuelData.errorKind === 'permission' && fuelData.errorMsg !== null;
+
+  // Prices go stale while the app sits in the background, and so does the user's position.
+  useEffect(() => {
+    if (isSettingsOnlyInstance) return;
+    let backgroundedAt: number | null = null;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        backgroundedAt = Date.now();
+      } else if (state === 'active' && backgroundedAt !== null) {
+        const awayMs = Date.now() - backgroundedAt;
+        backgroundedAt = null;
+        // Coming back from the OS settings after fixing location access should retry straight away.
+        if (awayMs >= FOREGROUND_REFRESH_AFTER_MS || locationBlockedRef.current) {
+          void refreshInPlaceRef.current();
         }
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Mount-only: setters and fetch refs are stable; hydrate is memoized.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    });
+    return () => subscription.remove();
+  }, [isSettingsOnlyInstance]);
+
+  const hasResults = fuelData.rankedStations.length > 0;
+  const handleRetry = useCallback(() => {
+    if (hasResults) {
+      void refreshInPlaceRef.current();
+    } else {
+      void runLoadRef.current(false);
+    }
+  }, [hasResults]);
+
+  const handleApplyRange = useCallback(async (rangeKm: string) => {
+    await saveUserPreferences({ remainingRangeKm: normaliseRangeKm(rangeKm) });
+    // Only the ranking changed, so reuse the stations fetched moments ago.
+    await refreshInPlaceRef.current(true);
   }, []);
 
   const handleHeaderLayout = useCallback(
@@ -313,10 +368,12 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
       if (activeTab !== 'settings') {
         return;
       }
+      // Pick up changes made elsewhere (e.g. the range set from the Prices screen).
+      void rehydrateFromStorage();
       return () => {
         flushSettingsOnLeave();
       };
-    }, [activeTab, flushSettingsOnLeave])
+    }, [activeTab, flushSettingsOnLeave, rehydrateFromStorage])
   );
 
   const bottomNavTabs: TabDefinition[] = [
@@ -324,7 +381,8 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
     { key: 'settings', label: 'Settings', icon: 'settings-outline' }
   ];
 
-  const { appMode, fuelNeeded } = settings;
+  const { appMode, fuelNeeded, remainingRangeKm } = settings;
+  const rangeChipLabel = usableRangeKm(remainingRangeKm, settings.rangeMarginPct) !== null ? `${remainingRangeKm} km range` : null;
   const { appliedFuelType } = fuelData;
 
   return (
@@ -365,12 +423,21 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
             styles={styles}
             topHeaderHeight={topHeaderHeight}
             scrollBottomPadding={scrollBottomPadding}
+            themeMode={themeMode}
             errorMsg={fuelData.errorMsg}
+            errorKind={fuelData.errorKind}
             loading={fuelData.loading}
             refreshing={fuelData.refreshing}
             rankedStations={fuelData.rankedStations}
             appMode={appMode}
-            onRefresh={handleListRefresh}
+            lastUpdatedAt={fuelData.lastUpdatedAt}
+            routingEstimated={fuelData.routingEstimated}
+            remainingRangeKm={remainingRangeKm}
+            rangeMarginPct={settings.rangeMarginPct}
+            onRefresh={() => void refreshInPlaceRef.current()}
+            onRetry={handleRetry}
+            onOpenSettings={() => navigateToTab('settings')}
+            onApplyRange={handleApplyRange}
             onSelectStation={setMapStation}
           />
         ) : (
@@ -380,6 +447,7 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
             themeMode={themeMode}
             topHeaderHeight={topHeaderHeight}
             settings={settings}
+            focusRequest={settingsFocus ?? localSettingsFocus}
           />
         )}
 
@@ -400,12 +468,12 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
                 <View style={styles.summarySingleRow}>
                   {canUseLiquidGlass ? (
                     <>
-                      <TouchableOpacity onPress={() => navigateToTab('settings')} accessibilityRole="button" accessibilityLabel="Open settings">
+                      <TouchableOpacity onPress={() => navigateToTab('settings', 'fuelAndRange')} accessibilityRole="button" accessibilityLabel="Open fuel and range settings">
                         <GlassView style={styles.summaryChipGlass} glassEffectStyle="regular">
                           <Text style={[styles.summaryChipText]}>{fuelNeeded}L</Text>
                         </GlassView>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => navigateToTab('settings')} accessibilityRole="button" accessibilityLabel="Open settings">
+                      <TouchableOpacity onPress={() => navigateToTab('settings', 'fuelAndRange')} accessibilityRole="button" accessibilityLabel="Open fuel and range settings">
                         <GlassView style={styles.summaryChipGlass} glassEffectStyle="regular">
                           <Text style={[styles.summaryChipText]}>{appliedFuelType}</Text>
                         </GlassView>
@@ -415,15 +483,22 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
                           <Text style={[styles.summaryChipText]}>{appMode === 'oneWay' ? 'One-way' : 'Round-trip'}</Text>
                         </GlassView>
                       </TouchableOpacity>
+                      {rangeChipLabel ? (
+                        <TouchableOpacity onPress={() => navigateToTab('settings', 'fuelAndRange')} accessibilityRole="button" accessibilityLabel="Open fuel and range settings">
+                          <GlassView style={styles.summaryChipGlass} glassEffectStyle="regular">
+                            <Text style={[styles.summaryChipText]}>{rangeChipLabel}</Text>
+                          </GlassView>
+                        </TouchableOpacity>
+                      ) : null}
                     </>
                   ) : (
                     <>
-                      <TouchableOpacity onPress={() => navigateToTab('settings')} accessibilityRole="button" accessibilityLabel="Open settings">
+                      <TouchableOpacity onPress={() => navigateToTab('settings', 'fuelAndRange')} accessibilityRole="button" accessibilityLabel="Open fuel and range settings">
                         <View style={styles.summaryChip}>
                           <Text style={styles.summaryChipText}>{fuelNeeded}L</Text>
                         </View>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => navigateToTab('settings')} accessibilityRole="button" accessibilityLabel="Open settings">
+                      <TouchableOpacity onPress={() => navigateToTab('settings', 'fuelAndRange')} accessibilityRole="button" accessibilityLabel="Open fuel and range settings">
                         <View style={styles.summaryChip}>
                           <Text style={styles.summaryChipText}>{appliedFuelType}</Text>
                         </View>
@@ -433,6 +508,13 @@ function AppContent({ initialTab = 'prices', hideBottomNav = false, onNavigateTo
                           <Text style={styles.summaryChipText}>{appMode === 'oneWay' ? 'One-way' : 'Round-trip'}</Text>
                         </View>
                       </TouchableOpacity>
+                      {rangeChipLabel ? (
+                        <TouchableOpacity onPress={() => navigateToTab('settings', 'fuelAndRange')} accessibilityRole="button" accessibilityLabel="Open fuel and range settings">
+                          <View style={styles.summaryChip}>
+                            <Text style={styles.summaryChipText}>{rangeChipLabel}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : null}
                     </>
                   )}
                 </View>

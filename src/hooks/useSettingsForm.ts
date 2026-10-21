@@ -1,7 +1,8 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import type { LocationObject } from 'expo-location';
 import { BRAND_OPTIONS, DEFAULT_FUEL_TYPE, DEFAULT_TRIP_DESTINATION } from '@/constants';
+import { DEFAULT_RANGE_MARGIN_PCT, toUsableRangeParam } from '@/lib/range';
 import type { AppMode, AppTab, Coordinates, SettingsSnapshot } from '@/types';
 import {
   fetchAddressSuggestions,
@@ -10,9 +11,9 @@ import {
   type AddressSuggestion
 } from '@/services/geocodingClient';
 import { loadUserPreferences, saveUserPreferences } from '@/services/preferencesStorage';
-import { getErrorMessage, normaliseBrands, normaliseFuelType } from '@/lib/utils';
+import { getErrorMessage, normaliseBrands, normaliseFuelType, normaliseRangeKm, sameOrderedStringArray } from '@/lib/utils';
 import { getRoundTripStartMissingMessage, getTripAddressMissingMessage } from '@/lib/appHelpers';
-import { roundToTwoDecimalPlaces } from '@/lib/numberFormatting';
+import { normalisePositiveDecimal, roundToTwoDecimalPlaces, sanitiseDecimalInput } from '@/lib/numberFormatting';
 import { useAddressPicker } from '@/hooks/useAddressPicker';
 import { createSettingsSnapshot, hasSettingsSnapshotChanges } from '@/lib/settingsSnapshot';
 import { publishSaveOutcome, type SaveResult } from '@/state/settingsSync';
@@ -30,6 +31,11 @@ type UseSettingsFormArgs = {
   fetchAndRankFuelDataRef: ReturnType<typeof useFuelData>['fetchAndRankFuelDataRef'];
   fetchAndRankTripDataRef: ReturnType<typeof useFuelData>['fetchAndRankTripDataRef'];
   onSettingsSaved?: () => void;
+  /**
+   * Recalculate prices after a save. False for the Settings-only route instance: the Prices
+   * route reloads itself when settings are saved, so fetching here would be thrown away.
+   */
+  refreshAfterSave?: boolean;
 };
 
 /**
@@ -45,12 +51,15 @@ export function useSettingsForm({
   setErrorMsg,
   fetchAndRankFuelDataRef,
   fetchAndRankTripDataRef,
-  onSettingsSaved
+  onSettingsSaved,
+  refreshAfterSave = true
 }: UseSettingsFormArgs) {
   const [appMode, setAppMode] = useState<AppMode>('roundTrip');
   const [useCurrentLocation, setUseCurrentLocation] = useState(true);
   const [fuelNeeded, setFuelNeeded] = useState('25');
   const [fuelEconomy, setFuelEconomy] = useState('10.0');
+  const [remainingRangeKm, setRemainingRangeKm] = useState('');
+  const [rangeMarginPct, setRangeMarginPct] = useState(DEFAULT_RANGE_MARGIN_PCT);
   const [fuelType, setFuelType] = useState(DEFAULT_FUEL_TYPE);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [tripDestination, setTripDestination] = useState<Coordinates>(DEFAULT_TRIP_DESTINATION);
@@ -151,18 +160,37 @@ export function useSettingsForm({
         useCurrentLocation,
         fuelNeeded,
         fuelEconomy,
+        remainingRangeKm,
+        rangeMarginPct,
         fuelType,
         selectedBrands,
         tripStartAddress,
         tripDestinationAddress
       }),
-    [appMode, useCurrentLocation, fuelNeeded, fuelEconomy, fuelType, selectedBrands, tripStartAddress, tripDestinationAddress]
+    [appMode, useCurrentLocation, fuelNeeded, fuelEconomy, remainingRangeKm, rangeMarginPct, fuelType, selectedBrands, tripStartAddress, tripDestinationAddress]
   );
 
   const hasPendingSettingsChanges = useMemo(
     () => hasSettingsSnapshotChanges(savedSettingsSnapshot, currentSettingsSnapshot),
     [savedSettingsSnapshot, currentSettingsSnapshot]
   );
+
+  // Which collapsible sections hold unsaved edits, so a collapsed header can still flag them.
+  const pendingSections = useMemo(() => {
+    const saved = savedSettingsSnapshot;
+    if (!saved) return { fuelAndRange: false, vehicleAndBrands: false };
+    const current = currentSettingsSnapshot;
+    return {
+      fuelAndRange:
+        saved.fuelNeeded !== current.fuelNeeded ||
+        saved.remainingRangeKm !== current.remainingRangeKm ||
+        saved.rangeMarginPct !== current.rangeMarginPct ||
+        saved.fuelType !== current.fuelType,
+      vehicleAndBrands:
+        saved.fuelEconomy !== current.fuelEconomy ||
+        !sameOrderedStringArray(saved.selectedBrands, current.selectedBrands)
+    };
+  }, [savedSettingsSnapshot, currentSettingsSnapshot]);
 
   // Hydrate the form from persisted preferences on initial load.
   const hydrate = useCallback((prefs: LoadedPreferences) => {
@@ -173,6 +201,8 @@ export function useSettingsForm({
     setUseCurrentLocation(prefs.useCurrentLocation);
     setFuelNeeded(prefs.fuelNeeded);
     setFuelEconomy(prefs.fuelEconomy);
+    setRemainingRangeKm(prefs.remainingRangeKm);
+    setRangeMarginPct(prefs.rangeMarginPct);
     setFuelType(fuelTypeNorm);
     setSelectedBrands(brandsNorm);
     setTripDestination(prefs.tripDestination);
@@ -184,6 +214,8 @@ export function useSettingsForm({
         useCurrentLocation: prefs.useCurrentLocation,
         fuelNeeded: prefs.fuelNeeded,
         fuelEconomy: prefs.fuelEconomy,
+        remainingRangeKm: prefs.remainingRangeKm,
+        rangeMarginPct: prefs.rangeMarginPct,
         fuelType: fuelTypeNorm,
         selectedBrands: brandsNorm,
         tripStartAddress: prefs.tripStartAddress,
@@ -210,16 +242,27 @@ export function useSettingsForm({
     );
   }, []);
 
+  // Reloads the form from storage (e.g. after the Prices screen changed the range), unless
+  // the user has unsaved edits that would be overwritten.
+  const rehydrateFromStorage = useCallback(async () => {
+    if (hasPendingSettingsChangesRef.current) return;
+    const prefs = await loadUserPreferences();
+    if (!hasPendingSettingsChangesRef.current) hydrate(prefs);
+  }, [hydrate]);
+
   const handleSaveSettings = async (): Promise<SaveResult> => {
     if (!hasPendingSettingsChanges || isSavingSettings) {
       return { outcome: 'nothing' };
     }
     setIsSavingSettings(true);
 
-    const roundedFuelNeeded = roundToTwoDecimalPlaces(fuelNeeded);
-    const roundedFuelEconomy = roundToTwoDecimalPlaces(fuelEconomy);
+    // Blank/zero/invalid values revert to the last saved value rather than reaching the ranking code.
+    const roundedFuelNeeded = normalisePositiveDecimal(roundToTwoDecimalPlaces(fuelNeeded), savedSettingsSnapshot?.fuelNeeded || '25');
+    const roundedFuelEconomy = normalisePositiveDecimal(roundToTwoDecimalPlaces(fuelEconomy), savedSettingsSnapshot?.fuelEconomy || '10.0');
     setFuelNeeded(roundedFuelNeeded);
     setFuelEconomy(roundedFuelEconomy);
+    const nextRangeKm = normaliseRangeKm(roundToTwoDecimalPlaces(sanitiseDecimalInput(remainingRangeKm)));
+    setRemainingRangeKm(nextRangeKm);
     const nextFuelType = normaliseFuelType(fuelType);
     const nextBrands = normaliseBrands(selectedBrands);
     setFuelType(nextFuelType);
@@ -245,7 +288,8 @@ export function useSettingsForm({
     setLoading(true);
 
     let resolvedUserLocation = userLocation;
-    if (useCurrentLocation && !resolvedUserLocation) {
+    // The Prices route fetches the live location itself after a save, so don't block saving on GPS here.
+    if (useCurrentLocation && !resolvedUserLocation && refreshAfterSave) {
       const res = await fetchLocation(true);
       if (!res.success) {
         setErrorMsg('Location permission is required when "Use my location" is enabled.');
@@ -325,6 +369,8 @@ export function useSettingsForm({
         useCurrentLocation,
         fuelNeeded: roundedFuelNeeded,
         fuelEconomy: roundedFuelEconomy,
+        remainingRangeKm: nextRangeKm,
+        rangeMarginPct,
         fuelType: nextFuelType,
         selectedBrands: nextBrands,
         tripDestination: nextTripDestination,
@@ -339,6 +385,8 @@ export function useSettingsForm({
           useCurrentLocation,
           fuelNeeded: roundedFuelNeeded,
           fuelEconomy: roundedFuelEconomy,
+          remainingRangeKm: nextRangeKm,
+          rangeMarginPct,
           fuelType: nextFuelType,
           selectedBrands: nextBrands,
           tripStartAddress: startAddress,
@@ -357,6 +405,12 @@ export function useSettingsForm({
     setStartSuggestions([]);
     setDestinationSuggestions([]);
 
+    if (!refreshAfterSave) {
+      setIsSavingSettings(false);
+      return { outcome: 'saved' };
+    }
+
+    const usableRange = toUsableRangeParam(nextRangeKm, rangeMarginPct);
     if (appMode === 'oneWay') {
       fetchAndRankTripDataRef.current(
         nextTripStart,
@@ -364,7 +418,8 @@ export function useSettingsForm({
         roundedFuelNeeded,
         roundedFuelEconomy,
         nextFuelType,
-        nextBrands
+        nextBrands,
+        usableRange
       );
     } else {
       fetchAndRankFuelDataRef.current(
@@ -373,7 +428,8 @@ export function useSettingsForm({
         roundedFuelNeeded,
         roundedFuelEconomy,
         nextFuelType,
-        nextBrands
+        nextBrands,
+        usableRange
       );
     }
     setIsSavingSettings(false);
@@ -395,6 +451,17 @@ export function useSettingsForm({
     }
   }, []);
 
+  // Edits are normally saved when leaving the Settings tab. Also save when the app is
+  // backgrounded, or edits made just before switching apps or killing the app would be lost.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background' && hasPendingSettingsChangesRef.current) {
+        void handleSaveSettingsRef.current().then(publishSaveOutcome);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   return {
     // state
     appMode,
@@ -405,6 +472,10 @@ export function useSettingsForm({
     setFuelNeeded,
     fuelEconomy,
     setFuelEconomy,
+    remainingRangeKm,
+    setRemainingRangeKm,
+    rangeMarginPct,
+    setRangeMarginPct,
     fuelType,
     setFuelType,
     selectedBrands,
@@ -427,12 +498,14 @@ export function useSettingsForm({
     startStatusText,
     destinationStatusText,
     hasPendingSettingsChanges,
+    pendingSections,
     // pickers + refs + actions
     startAddressPicker,
     destinationAddressPicker,
     isSelectingSuggestionRef,
     toggleBrandSelection,
     hydrate,
+    rehydrateFromStorage,
     flushSettingsOnLeave
   };
 }

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Keyboard, Platform, TextInput, type StyleProp, type TextStyle } from 'react-native';
-import { roundToTwoDecimalPlaces } from '@/lib/numberFormatting';
+import { NUMERIC_ACCESSORY_ID } from '@/components/NumericDoneBar';
+import { MAX_NUMERIC_INPUT_LENGTH, roundToTwoDecimalPlaces, sanitiseDecimalInput } from '@/lib/numberFormatting';
 
 type RoundedNumericInputProps = {
   value: string;
@@ -29,13 +30,7 @@ export function RoundedNumericInput({
   }, [keyboardTypeOverrideIOS]);
 
   const handleChangeText = (text: string) => {
-    const sanitised = text.replace(/[^0-9.]/g, '');
-    const firstDot = sanitised.indexOf('.');
-    const deduped =
-      firstDot === -1
-        ? sanitised
-        : sanitised.slice(0, firstDot + 1) + sanitised.slice(firstDot + 1).replace(/\./g, '');
-    onChangeText(deduped);
+    onChangeText(sanitiseDecimalInput(text));
   };
 
   return (
@@ -50,6 +45,8 @@ export function RoundedNumericInput({
           onChangeText(rounded);
         }
       }}
+      maxLength={MAX_NUMERIC_INPUT_LENGTH}
+      inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
       returnKeyType="done"
       onSubmitEditing={() => Keyboard.dismiss()}
       keyboardAppearance={keyboardAppearance}

@@ -11,9 +11,12 @@ export default function PricesRoute() {
       key={settingsVersion}
       initialTab="prices"
       hideBottomNav
-      onNavigateToTab={(tab) => {
+      onNavigateToTab={(tab, section) => {
         if (tab === 'settings') {
-          router.push('/settings');
+          router.push({
+            pathname: '/settings',
+            params: section ? { section, nonce: String(Date.now()) } : {}
+          });
         }
       }}
     />

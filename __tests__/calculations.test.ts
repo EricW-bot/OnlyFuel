@@ -34,6 +34,51 @@ describe('calculations helpers', () => {
   });
 });
 
+describe('computeRankedStations with remaining range', () => {
+  const buildData = () => {
+    // Cheapest stations are furthest away; API distances (km) are provided so no routing is needed.
+    const distances = [30, 20, 12, 6, 3];
+    const stations = distances.map((distance, index) => ({
+      code: `R${index}`,
+      name: `Range ${index}`,
+      location: { latitude: -33.9, longitude: 151.2, distance }
+    }));
+    const prices = stations.map((station, index) => ({ stationcode: station.code, price: 150 + index * 10 }));
+    return { stations, prices };
+  };
+
+  it('only returns stations within the discounted range', async () => {
+    jest.resetModules();
+    jest.doMock('@/services/routingClient', () => ({
+      fetchRouteDistanceDuration: jest.fn(async () => ({ distanceKm: 0, durationMin: 0 })),
+      fetchRouteVia: jest.fn(),
+      planRouteDistanceDuration: jest.fn(),
+      routeMetricsFromKnownDistanceKm: (distanceKm: number) => ({ distanceKm, durationMin: distanceKm })
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { computeRankedStations } = require('@/lib/calculations') as typeof import('@/lib/calculations');
+
+    // 8 km of usable range: only the 6 km and 3 km stations qualify.
+    const ranked = await computeRankedStations(buildData(), -33.9, 151.2, '40', '8', '8');
+    expect(ranked.map((item) => item.code).sort()).toEqual(['R3', 'R4']);
+  });
+
+  it('returns an empty list when nothing is reachable', async () => {
+    jest.resetModules();
+    jest.doMock('@/services/routingClient', () => ({
+      fetchRouteDistanceDuration: jest.fn(),
+      fetchRouteVia: jest.fn(),
+      planRouteDistanceDuration: jest.fn(),
+      routeMetricsFromKnownDistanceKm: (distanceKm: number) => ({ distanceKm, durationMin: distanceKm })
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { computeRankedStations } = require('@/lib/calculations') as typeof import('@/lib/calculations');
+
+    const ranked = await computeRankedStations(buildData(), -33.9, 151.2, '40', '8', '2');
+    expect(ranked).toEqual([]);
+  });
+});
+
 describe('computeTripRankedStations candidate staging', () => {
   it('routes only the tighter shortlist and still returns top results', async () => {
     jest.resetModules();

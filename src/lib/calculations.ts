@@ -5,6 +5,7 @@ import {
   ROUTING_CONCURRENCY,
   TRIP_CORRIDOR_KM
 } from '@/constants';
+import { haversineKm } from '@/lib/geo';
 import type { Coordinates, FuelApiData, RankedStation, RouteMetrics, Station } from '@/types';
 import {
   fetchRouteDistanceDuration,
@@ -21,6 +22,12 @@ export const sanitisePositiveNumber = (value: string, fallback: number): number 
   return parsed;
 };
 
+/** Parses the usable-range parameter (km, already reduced by the safety margin); null means no limit. */
+const parseUsableRangeKm = (rangeStr: string | undefined): number | null => {
+  const parsed = Number.parseFloat(rangeStr ?? '');
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
 const haversineStraightLineDistanceKm = (
@@ -28,20 +35,7 @@ const haversineStraightLineDistanceKm = (
   startLon: number,
   endLat: number,
   endLon: number
-): number => {
-  const earthRadiusKm = 6371;
-  const dLat = toRadians(endLat - startLat);
-  const dLon = toRadians(endLon - startLon);
-  const lat1 = toRadians(startLat);
-  const lat2 = toRadians(endLat);
-
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return earthRadiusKm * c;
-};
+): number => haversineKm({ latitude: startLat, longitude: startLon }, { latitude: endLat, longitude: endLon });
 
 const distancePointToSegmentKm = (
   point: Coordinates,
@@ -81,9 +75,30 @@ export async function computeRankedStations(
   userLat: number,
   userLon: number,
   neededStr: string,
-  economyStr: string
+  economyStr: string,
+  /** Usable range in km (already reduced by the safety margin); '' means no limit. */
+  rangeStr = ''
 ): Promise<RankedStation[]> {
-  const { stations, prices } = data;
+  const { prices } = data;
+  const maxReachKm = parseUsableRangeKm(rangeStr);
+  const isReachable = (distanceKm: number): boolean => maxReachKm === null || distanceKm <= maxReachKm;
+
+  // Stations arrive price-sorted, so drop unreachable ones before the candidate
+  // cap or nearby options could be cut in favour of cheaper, out-of-range ones.
+  // The straight line is a lower bound on road distance, so this never drops a reachable station.
+  const stations =
+    maxReachKm === null
+      ? data.stations
+      : data.stations.filter((station) => {
+          const apiDistanceKm = station.location.distance;
+          const straightKm = haversineStraightLineDistanceKm(
+            userLat,
+            userLon,
+            station.location.latitude,
+            station.location.longitude
+          );
+          return isReachable(Math.max(straightKm, apiDistanceKm ?? 0));
+        });
 
   const neededLiters = sanitisePositiveNumber(neededStr, 50);
   const economyLper100km = sanitisePositiveNumber(economyStr, 8.0);
@@ -185,6 +200,8 @@ export async function computeRankedStations(
           { knownDistanceKm: candidate.station.location.distance }
         );
 
+    if (!isReachable(route.distanceKm)) continue;
+
     const roundTripDistanceKm = route.distanceKm * 2;
     const fuelBurnedOnTrip = roundTripDistanceKm * litersPerKm;
     const totalEffectiveCost = candidate.pricePerLiter * (neededLiters + fuelBurnedOnTrip);
@@ -219,7 +236,8 @@ export async function computeRankedStations(
     };
   });
 
-  return displayRefined;
+  // Live routing can lengthen the displayed distance, so re-check against the range.
+  return displayRefined.filter((station) => isReachable(station.distanceKm));
 }
 
 type TripRankingParams = {
@@ -228,6 +246,8 @@ type TripRankingParams = {
   destination: Coordinates;
   neededStr: string;
   economyStr: string;
+  /** Usable range in km (already reduced by the safety margin); '' means no limit. */
+  rangeStr?: string;
   maxCandidates?: number;
   corridorKm?: number;
 };
@@ -281,11 +301,13 @@ export async function computeTripRankedStations(params: TripRankingParams): Prom
     destination,
     neededStr,
     economyStr,
+    rangeStr = '',
     maxCandidates = MAX_TRIP_ROUTE_CALCULATIONS,
     corridorKm = TRIP_CORRIDOR_KM
   } = params;
 
   const baselineRoute = await fetchRouteDistanceDuration(start, destination);
+  const maxReachKm = parseUsableRangeKm(rangeStr);
 
   const neededLiters = sanitisePositiveNumber(neededStr, 50);
   const economyLper100km = sanitisePositiveNumber(economyStr, 8.0);
@@ -326,6 +348,10 @@ export async function computeTripRankedStations(params: TripRankingParams): Prom
           station.location.latitude,
           station.location.longitude
         );
+        // Only the first leg matters for range: the user refuels at the stop.
+        if (maxReachKm !== null && legToStation > maxReachKm) {
+          return null;
+        }
         const legToDestination = haversineStraightLineDistanceKm(
           station.location.latitude,
           station.location.longitude,
@@ -364,6 +390,14 @@ export async function computeTripRankedStations(params: TripRankingParams): Prom
       longitude: candidate.station.location.longitude
     };
     const tripWithStopRoute = await fetchRouteVia(start, stationPoint, destination);
+    if (maxReachKm !== null) {
+      // Only the first leg matters for range: the user refuels at the stop.
+      const firstLegKm =
+        tripWithStopRoute.firstLegKm ?? (await fetchRouteDistanceDuration(start, stationPoint)).distanceKm;
+      if (firstLegKm > maxReachKm) {
+        return null;
+      }
+    }
 
     const detourKm = Math.max(tripWithStopRoute.distanceKm - baselineRoute.distanceKm, 0);
     const totalCostDollars = computeTripNetCostDollars(
@@ -382,7 +416,7 @@ export async function computeTripRankedStations(params: TripRankingParams): Prom
       baselineTripKm: baselineRoute.distanceKm,
       tripWithStopKm: tripWithStopRoute.distanceKm,
       detourKm
-    } as RankedStation;
+    } as RankedStation | null;
   });
 
   return keepFeasibleRankedStations(scored)

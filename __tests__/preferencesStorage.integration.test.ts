@@ -33,6 +33,52 @@ describe('preferences storage integration', () => {
     expect(loaded.tripDestinationAddress).toBe('2 Destination Rd');
   });
 
+  it('persists, clears and sanitises the remaining range', async () => {
+    expect((await loadUserPreferences()).remainingRangeKm).toBe('');
+
+    await saveUserPreferences({ remainingRangeKm: '45' });
+    expect((await loadUserPreferences()).remainingRangeKm).toBe('45');
+
+    await saveUserPreferences({ remainingRangeKm: '0' });
+    expect((await loadUserPreferences()).remainingRangeKm).toBe('');
+  });
+
+  it('expires an old range and keeps the original timestamp when re-saved unchanged', async () => {
+    const realNow = Date.now;
+    try {
+      Date.now = () => 1_000_000;
+      await saveUserPreferences({ remainingRangeKm: '30' });
+      Date.now = () => 1_000_000 + 60_000;
+      await saveUserPreferences({ remainingRangeKm: '30' });
+      expect(JSON.parse(storage['fuelnearme.preferences']).remainingRangeSetAt).toBe(1_000_000);
+
+      Date.now = () => 1_000_000 + 4 * 60 * 60 * 1000;
+      expect((await loadUserPreferences()).remainingRangeKm).toBe('');
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('treats a range saved without a timestamp as cleared, and defaults the margin', async () => {
+    storage['fuelnearme.preferences'] = JSON.stringify({ remainingRangeKm: '30', rangeMarginPct: 99 });
+    const loaded = await loadUserPreferences();
+    expect(loaded.remainingRangeKm).toBe('');
+    expect(loaded.rangeMarginPct).toBe(20);
+  });
+
+  it('repairs corrupt numeric values from storage and on save', async () => {
+    storage['fuelnearme.preferences'] = JSON.stringify({ fuelNeeded: 'abc', fuelEconomy: '.', remainingRangeKm: '12abc' });
+    const loaded = await loadUserPreferences();
+    expect(loaded.fuelNeeded).toBe('25');
+    expect(loaded.fuelEconomy).toBe('10.0');
+    // No timestamp, so the range is treated as expired.
+    expect(loaded.remainingRangeKm).toBe('');
+
+    await saveUserPreferences({ fuelNeeded: '40' });
+    await saveUserPreferences({ fuelNeeded: '.' });
+    expect((await loadUserPreferences()).fuelNeeded).toBe('40');
+  });
+
   it('migrates legacy tripDestinationLabel into tripDestinationAddress', async () => {
     storage['fuelnearme.preferences'] = JSON.stringify({
       appMode: 'oneWay',

@@ -18,6 +18,8 @@ const requestForegroundPermissionOnce = (): Promise<Location.LocationPermissionR
 type RefreshLocationResult = {
   success: boolean;
   errorMsg?: string;
+  /** True when the user (or the OS) has denied location access, so retrying won't help. */
+  permissionDenied?: boolean;
   location: Location.LocationObject | null;
 };
 
@@ -31,7 +33,8 @@ export function useLocation() {
         if (status !== 'granted') {
           return {
             success: false,
-            errorMsg: 'Permission to access location was denied.',
+            errorMsg: 'Location access is off. Turn it on in Settings, or set a start address instead.',
+            permissionDenied: true,
             location: null
           };
         }

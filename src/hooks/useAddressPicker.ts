@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Keyboard, Platform } from 'react-native';
 import type { AddressSuggestion } from '@/services/geocodingClient';
+import { sanitiseAddressInput } from '@/lib/utils';
 
 type CurrentRef<T> = {
   current: T;
@@ -145,7 +146,8 @@ export function useAddressPicker({
   );
 
   const handleChangeText = useCallback(
-    (nextText: string) => {
+    (rawText: string) => {
+      const nextText = sanitiseAddressInput(rawText);
       const prev = prevAddressForImeRef.current;
       prevAddressForImeRef.current = nextText;
       const trimmed = nextText.trim();

@@ -78,7 +78,9 @@ function buildGoogleRoundTripDirectionsUrl(start: Coordinates, station: Coordina
 export const GOOGLE_MAPS_IOS_SCHEME = 'comgooglemaps://';
 
 export const LOCATION_TIMEOUT_MS = 15000;
-export const LIVE_DATA_TIMEOUT_MS = 180000;
+export const LIVE_DATA_TIMEOUT_MS = 60000;
+/** Prices older than this when the app returns to the foreground are refreshed. */
+export const FOREGROUND_REFRESH_AFTER_MS = 10 * 60 * 1000;
 
 export function getTripAddressMissingMessage(
   startAddress: string,

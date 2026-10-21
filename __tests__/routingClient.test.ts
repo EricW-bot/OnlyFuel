@@ -77,6 +77,41 @@ describe('routing client fallback behavior', () => {
     expect(route.durationMin).toBeCloseTo(15, 5);
   });
 
+  it('reuses a live route for the same points instead of calling the provider again', async () => {
+    jest.resetModules();
+    const fetchWithTimeout = jest.fn().mockResolvedValue(mockResponse({ routes: [{ distance: 5000, duration: 600 }] }));
+    jest.doMock('react-native', () => ({ Platform: { OS: 'android' } }));
+    jest.doMock('@/constants', () => ({ AVG_CITY_SPEED_KMH: 50, OPENROUTESERVICE_API_KEY: 'ors-key' }));
+    jest.doMock('@/services/network', () => ({ fetchWithTimeout }));
+
+    const { fetchRouteDistanceDuration } = require('@/services/routingClient') as typeof import('@/services/routingClient');
+    const start = { latitude: -33.86, longitude: 151.2 };
+    const end = { latitude: -33.9, longitude: 151.25 };
+
+    const first = await fetchRouteDistanceDuration(start, end);
+    const second = await fetchRouteDistanceDuration(start, end);
+
+    expect(second).toEqual(first);
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache estimated routes, so a retry can get a live one', async () => {
+    jest.resetModules();
+    const fetchWithTimeout = jest.fn().mockRejectedValue(new Error('network down'));
+    jest.doMock('react-native', () => ({ Platform: { OS: 'web' } }));
+    jest.doMock('@/constants', () => ({ AVG_CITY_SPEED_KMH: 50, OPENROUTESERVICE_API_KEY: '' }));
+    jest.doMock('@/services/network', () => ({ fetchWithTimeout }));
+
+    const { fetchRouteDistanceDuration } = require('@/services/routingClient') as typeof import('@/services/routingClient');
+    const start = { latitude: -33.86, longitude: 151.2 };
+    const end = { latitude: -33.9, longitude: 151.25 };
+
+    await fetchRouteDistanceDuration(start, end);
+    await fetchRouteDistanceDuration(start, end);
+
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(2);
+  });
+
   it('provides minimum clamp for known distance metrics', async () => {
     const { routeMetricsFromKnownDistanceKm } = require('@/services/routingClient') as typeof import('@/services/routingClient');
     const metrics = routeMetricsFromKnownDistanceKm(0);

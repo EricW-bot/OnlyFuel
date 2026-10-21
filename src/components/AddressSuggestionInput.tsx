@@ -2,6 +2,8 @@ import React from 'react';
 import { Platform, Text, TextInput, TouchableOpacity, View, type StyleProp, type TextStyle } from 'react-native';
 import type { AddressSuggestion } from '@/services/geocodingClient';
 import type { createThemedStyles } from '@/theme/theme';
+import { MAX_ADDRESS_LENGTH } from '@/lib/utils';
+import { FadeInView } from '@/components/FadeInView';
 
 
 export type AddressUIModel = {
@@ -49,6 +51,7 @@ export function AddressSuggestionInput({
       <TextInput
         style={inputStyle}
         value={ui.value}
+        maxLength={MAX_ADDRESS_LENGTH}
         onChangeText={onChangeText}
         onFocus={onFocus}
         onBlur={onBlur}
@@ -68,7 +71,7 @@ export function AddressSuggestionInput({
         </View>
       ) : null}
       {showSuggestions ? (
-        <View style={[styles.suggestionsList, { marginBottom: 0 }]}>
+        <FadeInView style={[styles.suggestionsList, { marginBottom: 0 }]} offset={6} duration={160}>
           {ui.suggestions.map((suggestion) => (
             <TouchableOpacity
               key={`${keyPrefix}-${suggestion.id}`}
@@ -81,7 +84,7 @@ export function AddressSuggestionInput({
               <Text style={styles.suggestionText}>{suggestion.label}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </FadeInView>
       ) : null}
     </>
   );

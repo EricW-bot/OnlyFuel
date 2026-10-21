@@ -2,8 +2,41 @@ import type { Coordinates, RouteMetrics } from '@/types';
 import { Platform } from 'react-native';
 import { AVG_CITY_SPEED_KMH, OPENROUTESERVICE_API_KEY } from '@/constants';
 import { fetchWithTimeout } from '@/services/network';
+import { haversineKm } from '@/lib/geo';
 
 let estimatedRoutingUsedInSession = false;
+
+// Live routes between the same two points don't change meaningfully over a few minutes, and
+// re-ranking with a different range asks for many of the same ones. Estimates are never cached,
+// so a later retry can still get a real route.
+const ROUTE_CACHE_TTL_MS = 30 * 60 * 1000;
+const ROUTE_CACHE_MAX_ENTRIES = 500;
+const routeCache = new Map<string, { route: RouteMetrics; storedAt: number }>();
+
+const routeCacheKey = (start: Coordinates, end: Coordinates): string =>
+  `${start.latitude.toFixed(4)},${start.longitude.toFixed(4)}>${end.latitude.toFixed(4)},${end.longitude.toFixed(4)}`;
+
+const readCachedRoute = (key: string): RouteMetrics | null => {
+  const hit = routeCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.storedAt > ROUTE_CACHE_TTL_MS) {
+    routeCache.delete(key);
+    return null;
+  }
+  return hit.route;
+};
+
+const storeRoute = (key: string, route: RouteMetrics): void => {
+  if (routeCache.size >= ROUTE_CACHE_MAX_ENTRIES) {
+    const oldest = routeCache.keys().next().value;
+    if (oldest !== undefined) routeCache.delete(oldest);
+  }
+  routeCache.set(key, { route, storedAt: Date.now() });
+};
+
+export function clearRouteCache(): void {
+  routeCache.clear();
+}
 
 export function beginRoutingSession(): void {
   estimatedRoutingUsedInSession = false;
@@ -11,23 +44,6 @@ export function beginRoutingSession(): void {
 
 export function getRoutingSessionSource(): 'live' | 'estimated' {
   return estimatedRoutingUsedInSession ? 'estimated' : 'live';
-}
-
-function toRadians(value: number): number {
-  return (value * Math.PI) / 180;
-}
-
-function haversineKm(start: Coordinates, end: Coordinates): number {
-  const earthRadiusKm = 6371;
-  const latDelta = toRadians(end.latitude - start.latitude);
-  const lonDelta = toRadians(end.longitude - start.longitude);
-  const startLat = toRadians(start.latitude);
-  const endLat = toRadians(end.latitude);
-  const a =
-    Math.sin(latDelta / 2) * Math.sin(latDelta / 2) +
-    Math.cos(startLat) * Math.cos(endLat) * Math.sin(lonDelta / 2) * Math.sin(lonDelta / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
 }
 
 function estimateRouteDistanceDuration(start: Coordinates, end: Coordinates): RouteMetrics {
@@ -169,14 +185,22 @@ async function fetchOpenRouteServiceRoute(start: Coordinates, end: Coordinates):
 }
 
 export async function fetchRouteDistanceDuration(start: Coordinates, end: Coordinates): Promise<RouteMetrics> {
+  const cacheKey = routeCacheKey(start, end);
+  const cachedRoute = readCachedRoute(cacheKey);
+  if (cachedRoute) {
+    return cachedRoute;
+  }
+
   const osrmRoute = await fetchOsrmRoute(start, end);
   if (osrmRoute) {
+    storeRoute(cacheKey, osrmRoute);
     return osrmRoute;
   }
 
   if (Platform.OS !== 'web') {
     const orsRoute = await fetchOpenRouteServiceRoute(start, end);
     if (orsRoute) {
+      storeRoute(cacheKey, orsRoute);
       return orsRoute;
     }
   } else {
@@ -198,7 +222,8 @@ export async function fetchRouteVia(
 
   return {
     distanceKm: firstLeg.distanceKm + secondLeg.distanceKm,
-    durationMin: firstLeg.durationMin + secondLeg.durationMin
+    durationMin: firstLeg.durationMin + secondLeg.durationMin,
+    firstLegKm: firstLeg.distanceKm
   };
 }
 

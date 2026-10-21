@@ -1,5 +1,5 @@
 import type { SettingsSnapshot, SettingsSnapshotInput } from '@/types';
-import { normaliseBrands, normaliseFuelType, sameOrderedStringArray } from '@/lib/utils';
+import { normaliseBrands, normaliseFuelType, normaliseRangeKm, sameOrderedStringArray } from '@/lib/utils';
 
 export function createSettingsSnapshot(input: SettingsSnapshotInput): SettingsSnapshot {
   return {
@@ -7,6 +7,8 @@ export function createSettingsSnapshot(input: SettingsSnapshotInput): SettingsSn
     useCurrentLocation: input.useCurrentLocation,
     fuelNeeded: input.fuelNeeded.trim(),
     fuelEconomy: input.fuelEconomy.trim(),
+    remainingRangeKm: normaliseRangeKm(input.remainingRangeKm),
+    rangeMarginPct: input.rangeMarginPct,
     fuelType: normaliseFuelType(input.fuelType),
     selectedBrands: normaliseBrands(input.selectedBrands),
     tripStartAddress: input.tripStartAddress.trim(),
@@ -24,6 +26,8 @@ export function hasSettingsSnapshotChanges(
     saved.useCurrentLocation === current.useCurrentLocation &&
     saved.fuelNeeded === current.fuelNeeded &&
     saved.fuelEconomy === current.fuelEconomy &&
+    saved.remainingRangeKm === current.remainingRangeKm &&
+    saved.rangeMarginPct === current.rangeMarginPct &&
     saved.fuelType === current.fuelType &&
     sameOrderedStringArray(saved.selectedBrands, current.selectedBrands) &&
     saved.tripStartAddress === current.tripStartAddress &&

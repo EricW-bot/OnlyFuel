@@ -29,6 +29,8 @@ export type FuelApiData = {
 export type RouteMetrics = {
   distanceKm: number;
   durationMin: number;
+  /** For via-routes: distance of the first leg (start to the stop). */
+  firstLegKm?: number;
 };
 
 export type Coordinates = {
@@ -38,6 +40,12 @@ export type Coordinates = {
 
 export type AppMode = 'roundTrip' | 'oneWay';
 export type AppTab = 'prices' | 'settings';
+
+/** Collapsible Settings sections that other screens can deep-link to. */
+export type SettingsSection = 'fuelAndRange' | 'vehicleAndBrands';
+
+/** Asks Settings to open and scroll to a section; `nonce` makes repeat requests distinct. */
+export type SettingsFocusRequest = { section: SettingsSection; nonce: number };
 
 export type TabDefinition = {
   key: AppTab;
@@ -85,6 +93,8 @@ export type SettingsSnapshot = {
   useCurrentLocation: boolean;
   fuelNeeded: string;
   fuelEconomy: string;
+  remainingRangeKm: string;
+  rangeMarginPct: number;
   fuelType: string;
   selectedBrands: string[];
   tripStartAddress: string;
@@ -96,6 +106,8 @@ export type SettingsSnapshotInput = {
   useCurrentLocation: boolean;
   fuelNeeded: string;
   fuelEconomy: string;
+  remainingRangeKm: string;
+  rangeMarginPct: number;
   fuelType: string;
   selectedBrands: string[];
   tripStartAddress: string;

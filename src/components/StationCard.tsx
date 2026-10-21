@@ -1,8 +1,10 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from 'expo-glass-effect';
 import { canUseLiquidGlass } from '@/components/ThemedGlassView';
+import { FadeInView } from '@/components/FadeInView';
+import { PressableScale } from '@/components/PressableScale';
 import type { AppMode, RankedStation } from '@/types';
 import type { createThemedStyles, getPalette } from '@/theme/theme';
 
@@ -12,10 +14,13 @@ type StationCardProps = {
   appMode: AppMode;
   palette: ReturnType<typeof getPalette>;
   styles: ReturnType<typeof createThemedStyles>;
+  /** Distances come from a straight-line estimate, not live routing. */
+  distanceIsEstimate?: boolean;
   onPress: (station: RankedStation) => void;
 };
 
-export function StationCard({ item, index, appMode, palette, styles, onPress }: StationCardProps) {
+export function StationCard({ item, index, appMode, palette, styles, distanceIsEstimate = false, onPress }: StationCardProps) {
+  const approx = distanceIsEstimate ? '~' : '';
   const cardContent = (
     <>
       <View style={styles.cardHeader}>
@@ -43,8 +48,8 @@ export function StationCard({ item, index, appMode, palette, styles, onPress }: 
           </View>
           <Text style={styles.statValue}>
             {appMode === 'oneWay'
-              ? `${item.tripWithStopKm?.toFixed(1) ?? item.distanceKm.toFixed(1)} km`
-              : `${item.distanceKm.toFixed(1)} km`}
+              ? `${approx}${item.tripWithStopKm?.toFixed(1) ?? item.distanceKm.toFixed(1)} km`
+              : `${approx}${item.distanceKm.toFixed(1)} km`}
             {appMode === 'oneWay' && item.detourKm !== undefined ? `\n(+${item.detourKm.toFixed(1)} detour)` : ''}
             {item.durationMin > 0 ? `\n(${Math.round(item.durationMin)} min)` : ''}
           </Text>
@@ -61,8 +66,8 @@ export function StationCard({ item, index, appMode, palette, styles, onPress }: 
   );
 
   return (
-    <View style={styles.cardShell}>
-      <TouchableOpacity style={styles.cardTouchable} activeOpacity={0.9} onPress={() => onPress(item)}>
+    <FadeInView style={styles.cardShell} delay={Math.min(index, 5) * 70}>
+      <PressableScale style={styles.cardTouchable} pressedScale={0.98} onPress={() => onPress(item)}>
         {canUseLiquidGlass ? (
           <View style={styles.cardGlass}>
             <GlassView style={styles.cardGlassBackground} glassEffectStyle="regular" />
@@ -71,7 +76,7 @@ export function StationCard({ item, index, appMode, palette, styles, onPress }: 
         ) : (
           <View style={styles.card}>{cardContent}</View>
         )}
-      </TouchableOpacity>
-    </View>
+      </PressableScale>
+    </FadeInView>
   );
 }

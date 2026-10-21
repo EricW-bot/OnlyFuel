@@ -51,6 +51,7 @@ export const BRAND_OPTIONS = [
 ];
 export const AVG_CITY_SPEED_KMH = 50;
 
+
 /** Max parallel OSRM requests when station distance is not in the API payload. */
 export const ROUTING_CONCURRENCY = 4;
 

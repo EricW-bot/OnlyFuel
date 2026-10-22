@@ -11,7 +11,6 @@ import { CollapsibleSectionContent } from '@/components/CollapsibleSectionConten
 import { LAYOUT_ANIMATION_MS, animateNextLayout, getReduceMotion } from '@/lib/motion';
 import { BRAND_OPTIONS, FUEL_TYPE_OPTIONS } from '@/constants';
 import { RANGE_MARGIN_OPTIONS, usableRangeKm } from '@/lib/range';
-import { NumericDoneBar } from '@/components/NumericDoneBar';
 import type { AppMode, SettingsFocusRequest, SettingsSection } from '@/types';
 import type { createThemedStyles, getPalette } from '@/theme/theme';
 import type { useSettingsForm } from '@/hooks/useSettingsForm';
@@ -149,7 +148,6 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
         style={{ flex: 1 }}
       >
-        <NumericDoneBar palette={palette} />
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1 }}
@@ -243,6 +241,7 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
                   statusOkTextStyle={styles.addressStatusTextOk}
                   styles={styles}
                   keyPrefix="start"
+                  palette={palette}
                   onPressInSuggestion={() => {
                     isSelectingSuggestionRef.current = true;
                   }}
@@ -280,6 +279,7 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
                   statusOkTextStyle={styles.addressStatusTextOk}
                   styles={styles}
                   keyPrefix="dest"
+                  palette={palette}
                   onPressInSuggestion={() => {
                     isSelectingSuggestionRef.current = true;
                   }}
@@ -313,6 +313,7 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
                   inputStyle={styles.input}
                   keyboardAppearance={themeMode}
                   placeholder="e.g. 50"
+                  palette={palette}
                   placeholderTextColor={palette.placeholder}
                 />
 
@@ -323,6 +324,7 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
                   inputStyle={[styles.input, { marginBottom: 4 }]}
                   keyboardAppearance={themeMode}
                   placeholder="Leave blank for no limit"
+                  palette={palette}
                   placeholderTextColor={palette.placeholder}
                 />
                   <Text style={[styles.metaHint, { marginBottom: 12 }]}>
@@ -396,6 +398,7 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
                   inputStyle={styles.input}
                   keyboardAppearance={themeMode}
                   placeholder="e.g. 8.0"
+                  palette={palette}
                   placeholderTextColor={palette.placeholder}
                 />
 

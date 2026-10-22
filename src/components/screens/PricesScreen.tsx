@@ -9,7 +9,6 @@ import { StationCard } from '@/components/StationCard';
 import { FadeInView } from '@/components/FadeInView';
 import { FuelErrorNotice } from '@/components/FuelErrorNotice';
 import { LowFuelBar } from '@/components/LowFuelBar';
-import { NumericDoneBar } from '@/components/NumericDoneBar';
 
 type PricesScreenProps = {
   palette: ReturnType<typeof getPalette>;
@@ -77,7 +76,6 @@ export function PricesScreen({
 
   return (
     <View style={[styles.listContainer, { paddingTop: topHeaderHeight + 8, paddingBottom: 0 }]}>
-      <NumericDoneBar palette={palette} />
       <ScrollView
         refreshControl={
           <RefreshControl

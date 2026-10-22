@@ -2,17 +2,17 @@ import React from 'react';
 import { InputAccessoryView, Keyboard, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { getPalette } from '@/theme/theme';
 
-/** Links numeric inputs to the Done bar; the iOS decimal pad has no return key of its own. */
-export const NUMERIC_ACCESSORY_ID = 'numeric-done-bar';
-
-type NumericDoneBarProps = {
+type KeyboardDoneBarProps = {
+  /** Must be unique per input: React Native attaches an accessory view to the first input that uses its id. */
+  id: string;
   palette: ReturnType<typeof getPalette>;
 };
 
-export function NumericDoneBar({ palette }: NumericDoneBarProps) {
+/** Done bar above the iOS keyboard; the decimal pad has no return key of its own. */
+export function KeyboardDoneBar({ id, palette }: KeyboardDoneBarProps) {
   if (Platform.OS !== 'ios') return null;
   return (
-    <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
+    <InputAccessoryView nativeID={id}>
       <View style={[styles.bar, { backgroundColor: palette.cardBg, borderTopColor: palette.cardBorder }]}>
         <TouchableOpacity onPress={() => Keyboard.dismiss()} accessibilityRole="button" accessibilityLabel="Done">
           <Text style={[styles.done, { color: palette.primary }]}>Done</Text>

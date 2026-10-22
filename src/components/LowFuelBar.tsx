@@ -46,6 +46,7 @@ export function LowFuelBar({ palette, themeMode, activeRangeKm, marginPct, onApp
           inputStyle={[styles.input, { backgroundColor: palette.inputBg, borderColor: palette.inputBorder, color: palette.inputText }]}
           keyboardAppearance={themeMode}
           placeholder="e.g. 25"
+          palette={palette}
           placeholderTextColor={palette.placeholder}
         />
         <Text style={[styles.hint, { color: palette.metaHint }]}>

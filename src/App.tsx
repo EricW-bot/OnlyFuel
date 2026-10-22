@@ -306,8 +306,11 @@ function AppContent({
     };
   }, []);
 
+  const locationBlocked = fuelData.errorKind === 'permission' && fuelData.errorMsg !== null;
   const locationBlockedRef = useRef(false);
-  locationBlockedRef.current = fuelData.errorKind === 'permission' && fuelData.errorMsg !== null;
+  useLayoutEffect(() => {
+    locationBlockedRef.current = locationBlocked;
+  }, [locationBlocked]);
 
   // Prices go stale while the app sits in the background, and so does the user's position.
   useEffect(() => {

@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 import { Keyboard, Platform, TextInput, type StyleProp, type TextStyle } from 'react-native';
-import { NUMERIC_ACCESSORY_ID } from '@/components/NumericDoneBar';
+import { KeyboardDoneBar } from '@/components/KeyboardDoneBar';
 import { MAX_NUMERIC_INPUT_LENGTH, roundToTwoDecimalPlaces, sanitiseDecimalInput } from '@/lib/numberFormatting';
+import type { getPalette } from '@/theme/theme';
 
 type RoundedNumericInputProps = {
   value: string;
@@ -11,6 +12,7 @@ type RoundedNumericInputProps = {
   inputStyle?: StyleProp<TextStyle>;
   keyboardAppearance?: 'light' | 'dark';
   keyboardTypeOverrideIOS?: string;
+  palette: ReturnType<typeof getPalette>;
 };
 
 export function RoundedNumericInput({
@@ -20,7 +22,8 @@ export function RoundedNumericInput({
   placeholderTextColor,
   inputStyle,
   keyboardAppearance,
-  keyboardTypeOverrideIOS
+  keyboardTypeOverrideIOS,
+  palette
 }: RoundedNumericInputProps) {
   const keyboardType = useMemo(() => {
     if (Platform.OS === 'ios') {
@@ -29,30 +32,35 @@ export function RoundedNumericInput({
     return 'numeric';
   }, [keyboardTypeOverrideIOS]);
 
+  const doneBarId = `done-bar-${useId()}`;
+
   const handleChangeText = (text: string) => {
     onChangeText(sanitiseDecimalInput(text));
   };
 
   return (
-    <TextInput
-      style={inputStyle}
-      keyboardType={keyboardType as any}
-      value={value}
-      onChangeText={handleChangeText}
-      onBlur={() => {
-        const rounded = roundToTwoDecimalPlaces(value);
-        if (rounded !== value) {
-          onChangeText(rounded);
-        }
-      }}
-      maxLength={MAX_NUMERIC_INPUT_LENGTH}
-      inputAccessoryViewID={Platform.OS === 'ios' ? NUMERIC_ACCESSORY_ID : undefined}
-      returnKeyType="done"
-      onSubmitEditing={() => Keyboard.dismiss()}
-      keyboardAppearance={keyboardAppearance}
-      placeholder={placeholder}
-      placeholderTextColor={placeholderTextColor}
-    />
+    <>
+      <TextInput
+        style={inputStyle}
+        keyboardType={keyboardType as any}
+        value={value}
+        onChangeText={handleChangeText}
+        onBlur={() => {
+          const rounded = roundToTwoDecimalPlaces(value);
+          if (rounded !== value) {
+            onChangeText(rounded);
+          }
+        }}
+        maxLength={MAX_NUMERIC_INPUT_LENGTH}
+        inputAccessoryViewID={Platform.OS === 'ios' ? doneBarId : undefined}
+        returnKeyType="done"
+        onSubmitEditing={() => Keyboard.dismiss()}
+        keyboardAppearance={keyboardAppearance}
+        placeholder={placeholder}
+        placeholderTextColor={placeholderTextColor}
+      />
+      <KeyboardDoneBar id={doneBarId} palette={palette} />
+    </>
   );
 }
 

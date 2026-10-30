@@ -753,7 +753,7 @@ export function createThemedStyles(c: Palette) {
       alignItems: 'center'
     },
     mapOpenExternalButtonText: {
-      color: '#007AFF',
+      color: '#FFFFFF',
       fontSize: 18,
       fontWeight: '500',
       textAlign: 'center'

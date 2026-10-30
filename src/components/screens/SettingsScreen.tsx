@@ -144,7 +144,8 @@ export function SettingsScreen({ palette, styles, themeMode, topHeaderHeight, se
   return (
     <View style={[styles.listContainer, { paddingTop: topHeaderHeight + 8, paddingBottom: 0 }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // Android is edge-to-edge, so the window no longer resizes for the keyboard (adjustResize is ignored).
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
         style={{ flex: 1 }}
       >
